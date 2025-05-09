@@ -19,6 +19,8 @@ using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 using GariusStorage.Api.Infrastructure.Middleware;
 using GariusStorage.Api.Domain.Interfaces;
+using GariusStorage.Api.Application.Interfaces;
+using GariusStorage.Api.Application.Services;
 
 // --- CONFIGURAÇÃO DO SERILOG --- //
 Log.Logger = new LoggerConfiguration()
@@ -296,6 +298,7 @@ builder.Services.AddAuthorization(options => AuthorizationPolicies.ConfigurePoli
 
 // --- INJEÇÃO DE DEPENDÊNCIAS -- //
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<ITokenService, TokenService>();
 
 var app = builder.Build();
 

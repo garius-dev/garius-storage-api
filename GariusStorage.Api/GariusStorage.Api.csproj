@@ -42,8 +42,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Application\Interfaces\" />
-    <Folder Include="Application\Services\" />
     <Folder Include="Infrastructure\Data\Repositories\" />
   </ItemGroup>
 

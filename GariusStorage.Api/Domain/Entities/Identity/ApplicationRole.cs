@@ -8,6 +8,8 @@ namespace GariusStorage.Api.Domain.Entities.Identity
         // Exemplo:
         // public string Description { get; set; }
 
+        public bool IsExternalUser { get; set; } = false;
+
         // Construtor padrão necessário para Identity e EF Core
         public ApplicationRole() : base() { }
 

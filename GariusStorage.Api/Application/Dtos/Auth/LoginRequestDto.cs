@@ -1,11 +1,11 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace GariusStorage.Api.Application.Dtos
+namespace GariusStorage.Api.Application.Dtos.Auth
 {
     public class LoginRequestDto
     {
-        [Required(ErrorMessage = "O nome de usuário é obrigatório.")]
-        public string Username { get; set; } // Pode ser o email, dependendo de como você configura o Identity
+        [Required(ErrorMessage = "O nome de usuário (email) é obrigatório.")]
+        public string Username { get; set; }
 
         [Required(ErrorMessage = "A senha é obrigatória.")]
         [DataType(DataType.Password)]

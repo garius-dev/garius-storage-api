@@ -11,6 +11,7 @@ using Google.Apis.Auth;
 using GariusStorage.Api.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using GariusStorage.Api.Application.Interfaces;
 
 namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
 {
@@ -19,34 +20,25 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
     [ApiController]
     public class AuthController : ControllerBase
     {
+        private readonly UserManager<ApplicationUser> _userManager;
         private readonly SignInManager<ApplicationUser> _signInManager;
+        private readonly ITokenService _tokenService;
         private readonly AuthenticationSettings _externalAuthSettings;
-        private readonly IConfiguration _configuration;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(SignInManager<ApplicationUser> signInManager,
+        public AuthController(
+            UserManager<ApplicationUser> userManager,
+            SignInManager<ApplicationUser> signInManager,
+            ITokenService tokenService,
             IOptions<AuthenticationSettings> externalAuthSettings,
-            IConfiguration configuration)
+            ILogger<AuthController> logger)
         {
+            _userManager = userManager;
             _signInManager = signInManager;
+            _tokenService = tokenService;
             _externalAuthSettings = externalAuthSettings.Value;
-            _configuration = configuration;
+            _logger = logger;
         }
 
-        [HttpGet("login/google")]
-        public IActionResult LoginWithGoogle(string? returnUrl = null)
-        {
-            var properties = new AuthenticationProperties
-            {
-                RedirectUri = Url.Action(nameof(GoogleCallback))
-            };
-
-            return Challenge(properties, GoogleDefaults.AuthenticationScheme);
-        }
-
-        [HttpGet("google-callback")]
-        public async Task<IActionResult> GoogleCallback()
-        {
-            return Ok();
-        }
     }
 }

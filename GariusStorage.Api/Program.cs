@@ -21,6 +21,7 @@ using GariusStorage.Api.Infrastructure.Middleware;
 using GariusStorage.Api.Domain.Interfaces;
 using GariusStorage.Api.Application.Interfaces;
 using GariusStorage.Api.Application.Services;
+using Microsoft.AspNetCore.HttpOverrides; // Adicionar este using
 
 // --- CONFIGURAÇÃO DO SERILOG --- //
 Log.Logger = new LoggerConfiguration()
@@ -72,7 +73,7 @@ try
     var connectionStringSettings = LoadConfigHelper.LoadConfigFromSecret<Dictionary<string, string>>(builder.Configuration, "GariusStorageApi--ConnectionStrings");
     currentConnectionString = connectionStringSettings[builder.Environment.EnvironmentName];
     builder.Services.AddSingleton(Options.Create(currentConnectionString));
-    
+
 
     cloudflareSettings = LoadConfigHelper.LoadConfigFromSecret<CloudflareSettings>(builder.Configuration, "GariusStorageApi--CloudflareSettings");
     builder.Services.AddSingleton(Options.Create(cloudflareSettings));
@@ -86,7 +87,7 @@ try
     resendSettings = LoadConfigHelper.LoadConfigFromSecret<ResendSettings>(builder.Configuration, "GariusStorageApi--ResendSettings");
     builder.Services.AddSingleton(Options.Create(resendSettings));
 
-    jwtSettings = LoadConfigHelper.LoadConfigFromSecret<JwtSettings>(builder.Configuration, "MetalFlowScheduler-JwtSettings");
+    jwtSettings = LoadConfigHelper.LoadConfigFromSecret<JwtSettings>(builder.Configuration, "MetalFlowScheduler-JwtSettings"); // Atenção: Nome do secret parece ser de outro projeto. Verifique se é o correto.
     builder.Services.AddSingleton(Options.Create(jwtSettings));
 
 }
@@ -141,8 +142,8 @@ builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
     options.User.RequireUniqueEmail = true; // Requer email único
 
     // Configurações de SignIn
-    options.SignIn.RequireConfirmedAccount = false; // Defina como true se usar confirmação de email
-    options.SignIn.RequireConfirmedEmail = false;
+    options.SignIn.RequireConfirmedAccount = true; // Alterado para true para exigir confirmação de email para usuários locais
+    options.SignIn.RequireConfirmedEmail = true; // Garante que o email confirmado seja necessário
     options.SignIn.RequireConfirmedPhoneNumber = false;
 
 })
@@ -158,69 +159,72 @@ builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    // Para login externo, o Scheme padrão pode ser o do Cookie se você quiser que o SignInManager lide com o cookie de correlação.
+    // options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme; // Adicionar se usar cookies para login externo
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false;
+    options.RequireHttpsMetadata = !builder.Environment.IsDevelopment(); // Em desenvolvimento pode ser false
     options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuerSigningKey = true, // Valida a assinatura do token usando a chave secreta
-        IssuerSigningKey = new SymmetricSecurityKey(key), // A chave secreta usada para validar
-        ValidateIssuer = true, // Valida se o emissor do token é o esperado
-        ValidIssuer = jwtSettings.Issuer, // O emissor esperado (definido em appsettings ou user-secrets)
-        ValidateAudience = true, // Valida se o público do token é o esperado
-        ValidAudience = jwtSettings.Audience, // O público esperado (definido em appsettings ou user-secrets)
-        ValidateLifetime = true, // Valida se o token não expirou
-        ClockSkew = TimeSpan.Zero // Define a tolerância de tempo para expiração (zero é mais rigoroso)
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ValidateIssuer = true,
+        ValidIssuer = jwtSettings.Issuer,
+        ValidateAudience = true,
+        ValidAudience = jwtSettings.Audience,
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.Zero
     };
+})
+// --- CONFIGURAÇÃO DA AUTENTICAÇÃO VIA EXTERNAL LOGIN (Google, Microsoft, etc.) --- //
+// Adicionar autenticação por Cookie é crucial para que o SignInManager funcione corretamente com logins externos
+// Ele usa um cookie temporário (correlação) para rastrear o estado entre a chamada para o provedor externo e o callback.
+.AddCookie(options => // Configuração do Cookie para logins externos e Identity
+{
+    options.LoginPath = "/api/v1/auth/login"; // Ou uma página de login se você tiver uma UI na API
+    options.AccessDeniedPath = "/api/v1/auth/access-denied"; // Endpoint para acesso negado
+    // options.ExpireTimeSpan = TimeSpan.FromMinutes(60); // Opcional: tempo de vida do cookie de autenticação
+    // options.SlidingExpiration = true; // Opcional
+})
+.AddGoogle(options =>
+{
+    options.ClientId = externalAuthenticationSettings.Google.ClientId;
+    options.ClientSecret = externalAuthenticationSettings.Google.ClientSecret;
+    options.SaveTokens = true; // Salva tokens do Google (access_token, refresh_token) se necessário
+    // O CallbackPath DEVE corresponder ao URI de redirecionamento configurado no Google Cloud Console
+    // E também ao endpoint que lida com o callback na sua API (ExternalLoginCallback no AuthController)
+    options.CallbackPath = "/signin-google"; // Ajuste se o seu endpoint de callback for diferente
+    options.Scope.Add("profile"); // Adiciona o escopo "profile"
+    options.Scope.Add("email");   // Adiciona o escopo "email"
+})
+.AddMicrosoftAccount(options =>
+{
+    options.ClientId = externalAuthenticationSettings.Microsoft.ClientId;
+    options.ClientSecret = externalAuthenticationSettings.Microsoft.ClientSecret;
+    options.SaveTokens = true;
+    options.CallbackPath = "/signin-microsoft"; // Ajuste para o seu endpoint de callback da Microsoft
 });
-
-// --- CONFIGURAÇÃO DA AUTENTICAÇÃO VIA EXTERNAL LOGIN --- //
-builder.Services.AddAuthentication()
-    .AddCookie()
-    .AddGoogle(options =>
-    {
-        
-        options.ClientId = externalAuthenticationSettings.Google.ClientId;
-        options.ClientSecret = externalAuthenticationSettings.Google.ClientSecret;
-        options.SaveTokens = true;
-        options.CallbackPath = "/signin-google";
-        options.Scope.Add("https://www.googleapis.com/auth/userinfo.profile");
-        options.Scope.Add("https://www.googleapis.com/auth/userinfo.email");
-    })
-    .AddMicrosoftAccount(options =>
-    {
-        
-        options.ClientId = externalAuthenticationSettings.Microsoft.ClientId;
-        options.ClientSecret = externalAuthenticationSettings.Microsoft.ClientSecret;
-        options.SaveTokens = true;
-        options.CallbackPath = "/signin-microsoft";
-    });
 
 // --- CONFIGURAÇÃO DO SWAGGER --- //
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    // Configuração para a versão 1
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "GariusStorage.Api - V1",
         Version = "v1"
     });
-
-    // Configuração para o Swagger UI entender e permitir o envio do token JWT (Bearer)
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme()
     {
-        Name = "Authorization", // Nome do cabeçalho HTTP
-        Type = SecuritySchemeType.ApiKey, // Tipo de esquema (ApiKey é usado para cabeçalhos)
-        Scheme = "Bearer", // O esquema de autenticação (Bearer)
-        BearerFormat = "JWT", // Formato do token (JWT)
-        In = ParameterLocation.Header, // Onde o token será enviado (no cabeçalho)
+        Name = "Authorization",
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
         Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer ' [space] and then your token in the text input below.\r\n\r\nExample: \"Bearer 12345abcdef\"",
     });
-
-    // Adiciona a exigência de segurança (o token Bearer) para todos os endpoints no Swagger UI
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -229,13 +233,12 @@ builder.Services.AddSwaggerGen(options =>
                 Reference = new OpenApiReference
                 {
                     Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer" // Deve corresponder ao nome definido em AddSecurityDefinition
+                    Id = "Bearer"
                 }
             },
-            new string[] {} // Escopos necessários (vazio para JWT simples)
+            new string[] {}
         }
     });
-
     options.DocInclusionPredicate((docName, apiDesc) =>
     {
         if (!apiDesc.TryGetMethodInfo(out var methodInfo)) return false;
@@ -255,10 +258,10 @@ builder.Services.AddApiVersioning(options =>
     options.DefaultApiVersion = new ApiVersion(1, 0);
     options.AssumeDefaultVersionWhenUnspecified = true;
     options.ReportApiVersions = true;
-    options.ApiVersionReader = new UrlSegmentApiVersionReader(); // Lê a versão de um segmento da URL, ex.: /api/v2
+    options.ApiVersionReader = new UrlSegmentApiVersionReader();
 }).AddApiExplorer(options =>
 {
-    options.GroupNameFormat = "'v'VVV"; // Formato do grupo (ex.: v2)
+    options.GroupNameFormat = "'v'VVV";
     options.SubstituteApiVersionInUrl = true;
 });
 
@@ -267,40 +270,61 @@ builder.Services.AddApiVersioning(options =>
 // --- CONFIGURAÇÃO DO CORS --- //
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp", builder =>
+    options.AddPolicy("AllowSpecificOrigins", policyBuilder => // Renomeado para maior clareza
     {
-        builder.WithOrigins("http://localhost:5173", "https://localhost:5173", "https://jackal-infinite-penguin.ngrok-free.app")
+        policyBuilder.WithOrigins(
+                        "http://localhost:5173", // Frontend React local
+                        "https://localhost:5173",
+                        "https://jackal-infinite-penguin.ngrok-free.app" // Sua URL do ngrok
+                       )
                .AllowAnyMethod()
                .AllowAnyHeader();
+        // Se o Swagger UI for acessado por uma URL diferente (ex: a da API via ngrok)
+        // e precisar de CORS (o que não deveria ser o caso para o redirecionamento 302 inicial),
+        // você adicionaria essa origem aqui também.
+        // Ex: .WithOrigins("https://sua-api-url-ngrok.com")
     });
 });
-
-
 
 // --- CONFIGURAÇÃO DO AUTO-MAPPER --- //
 builder.Services.AddAutoMapper(typeof(MappingProfile).Assembly);
 
-
 // --- CONFIGURAÇÃO DO SERILOG --- //
 builder.Host.UseSerilog();
-
 
 // --- CONFIGURAÇÃO DOS CONTROLLERS --- //
 builder.Services.AddControllers();
 
-
 // --- CONFIGURAÇÃO DA AUTORIZAÇÃO COM POLICES --- //
 builder.Services.AddAuthorization(options => AuthorizationPolicies.ConfigurePolicies(options));
 
-
+// --- CONFIGURAÇÃO PARA FORWARDED HEADERS (PROXY REVERSO COMO NGROK) --- //
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Se o ngrok ou outro proxy não estiver rodando no localhost em relação à sua app,
+    // você pode precisar limpar KnownProxies e KnownNetworks.
+    // options.KnownProxies.Clear();
+    // options.KnownNetworks.Clear();
+});
 
 #endregion
 
 // --- INJEÇÃO DE DEPENDÊNCIAS -- //
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IAuthService, AuthService>(); // Registrar AuthService
+// Adicionar IEmailService e IUserManagementService quando criados
+// builder.Services.AddScoped<IEmailService, EmailService>();
+// builder.Services.AddScoped<IUserManagementService, UserManagementService>();
+
 
 var app = builder.Build();
+
+// --- CONFIGURAÇÃO DO MIDDLEWARE DE FORWARDED HEADERS --- //
+// Deve ser um dos primeiros middlewares, especialmente antes de UseAuthentication e outros que dependem do scheme/host correto.
+app.UseForwardedHeaders();
 
 // --- CONFIGURAÇÃO DO MIDDLEWARE DE EXCEPTIONS --- //
 app.UseErrorHandlingMiddleware();
@@ -309,32 +333,31 @@ app.UseErrorHandlingMiddleware();
 app.UseSerilogRequestLogging();
 
 // --- CONFIGURAÇÃO DO SWAGGER --- //
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("LocalDevelopmentWithNgrok")) // Permite Swagger com ngrok também
 {
     app.UseSwagger();
     app.UseSwaggerUI(options =>
     {
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "GariusStorage API V1");
         options.RoutePrefix = "swagger";
-        options.DefaultModelExpandDepth(-1); // Opcional: oculta o schema de modelos
+        options.DefaultModelExpandDepth(-1);
     });
-
 }
 
 // --- CONFIGURAÇÃO DO CORS --- //
-app.UseCors("AllowReactApp");
+app.UseCors("AllowSpecificOrigins"); // Usar a política nomeada
 
 app.UseHttpsRedirection();
 
+// A ordem é importante: Authentication antes de Authorization
 app.UseAuthentication();
-
 app.UseAuthorization();
 
 app.MapControllers();
 
 try
 {
-    Log.Information("Iniciando a aplicação MetalFlowScheduler API...");
+    Log.Information("Iniciando a aplicação GariusStorage API..."); // Nome da aplicação atualizado
     app.Run();
 }
 catch (Exception ex)

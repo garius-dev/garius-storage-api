@@ -1,24 +1,31 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿using CloudinaryDotNet.Actions;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Identity;
 
 namespace GariusStorage.Api.Domain.Entities.Identity
 {
-    // IdentityUser já inclui propriedades como Username, PasswordHash, Email, PhoneNumber, etc.
-    public class ApplicationUser : IdentityUser<Guid> // Usamos int para o tipo da chave primária para consistência com suas outras entidades
+
+    public class ApplicationUser : IdentityUser<Guid>
     {
-        // Adicione propriedades customizadas aqui, se necessário.
-        // Exemplo:
-        // public string FullName { get; set; }
-        // public DateTime DateOfBirth { get; set; }
 
-        // O IdentityUser já tem propriedades como EmailConfirmed, PhoneNumberConfirmed, LockoutEnabled, LockoutEnd, TwoFactorEnabled.
-        // Se você precisar de um status de ativação simples como o seu 'Enabled', pode adicionar,
-        // mas considere usar LockoutEnabled do Identity, que é mais robusto para bloqueio de contas.
-        // public bool IsActive { get; set; } = true; // Exemplo de propriedade customizada
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public bool IsExternalUser { get; set; } = false;
+        public bool IsActive { get; set; } = true;
+        public DateTime CreatedAt { get; set; }
+        public DateTime LastUpdate { get; set; }
 
-        // Construtor padrão necessário para Identity e EF Core
-        public ApplicationUser() : base() { }
+        public ApplicationUser() : base() 
+        {
+            CreatedAt = DateTime.UtcNow;
+            LastUpdate = DateTime.UtcNow;
+        }
 
         // Construtor com username (email é comum ser o username)
-        public ApplicationUser(string userName) : base(userName) { }
+        public ApplicationUser(string userName) : base(userName)
+        {
+            CreatedAt = DateTime.UtcNow;
+            LastUpdate = DateTime.UtcNow;
+        }
     }
 }

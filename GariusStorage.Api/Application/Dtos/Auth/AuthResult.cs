@@ -39,9 +39,9 @@
             return new AuthResult(false, null, new[] { "Conta bloqueada devido a múltiplas tentativas de login falhas." }, isLockedOut: true);
         }
 
-        public static AuthResult NotAllowed()
+        public static AuthResult NotAllowed(string errorMessage)
         {
-            return new AuthResult(false, null, new[] { "Login não permitido. Verifique seu email para confirmação, se aplicável." }, isNotAllowed: true);
+            return new AuthResult(false, null, new[] { errorMessage }, isNotAllowed: true);
         }
         public static AuthResult RequiresTwoFactorAuth()
         {

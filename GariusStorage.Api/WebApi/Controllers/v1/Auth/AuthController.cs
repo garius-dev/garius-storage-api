@@ -1,38 +1,40 @@
 ﻿using Asp.Versioning;
-using GariusStorage.Api.Application.Dtos;
-using GariusStorage.Api.Domain.Entities.Identity;
-using Microsoft.AspNetCore.Authentication.Google;
-using Microsoft.AspNetCore.Authentication;
+using GariusStorage.Api.Application.Dtos.Auth;
+using GariusStorage.Api.Application.Interfaces;
+using GariusStorage.Api.Configuration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
-using Google.Apis.Auth;
-using GariusStorage.Api.Configuration;
 using Microsoft.Extensions.Options;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using GariusStorage.Api.Application.Interfaces;
-using GariusStorage.Api.Application.Dtos.Auth;
+using System.Threading.Tasks;
+using System.Web; // Para HttpUtility.UrlEncode nos links de exemplo
 
 namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
 {
     [ApiVersion("1.0")]
-    [Route("api/v{version:apiVersion}/[controller]")]
+    [Route("api/v{version:apiVersion}/auth")]
     [ApiController]
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
+        private readonly IEmailService _emailService; // Injetar IEmailService
         private readonly ILogger<AuthController> _logger;
-        // Se for construir URLs de callback/confirmação no controller:
-        // private readonly LinkGenerator _linkGenerator;
+        private readonly IConfiguration _configuration; // Para ler URLs do frontend
+        private readonly ResendUrlCallbackSettings _resendUrlCallbackSettings; // Para o Resend
 
         public AuthController(
             IAuthService authService,
-            SignInManager<GariusStorage.Api.Domain.Entities.Identity.ApplicationUser> signInManager,
-            ILogger<AuthController> logger)
+            IEmailService emailService, // Adicionar aqui
+            ILogger<AuthController> logger,
+            IConfiguration configuration,
+            IOptions<ResendUrlCallbackSettings> resendUrlCallbackSettings) // Adicionar IConfiguration
         {
             _authService = authService;
+            _emailService = emailService; // Atribuir
             _logger = logger;
+            _configuration = configuration; // Atribuir
+            _resendUrlCallbackSettings = resendUrlCallbackSettings.Value; // Atribuir
         }
 
         [HttpPost("register")]
@@ -46,26 +48,38 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
                 return BadRequest(ModelState);
             }
 
-            var result = await _authService.RegisterLocalUserAsync(registerDto);
+            var authOperationResult = await _authService.RegisterLocalUserAsync(registerDto);
 
-            if (!result.Succeeded)
+            if (!authOperationResult.Succeeded)
             {
-                return BadRequest(result); // Retorna o AuthResult com os erros
+                return BadRequest(authOperationResult);
             }
 
-            // Opcional: Se quiser enviar o email de confirmação a partir daqui
-            // var (identityResult, user, token) = await _authService.GenerateEmailConfirmationTokenAsync(registerDto.Email);
-            // if (identityResult.Succeeded && user != null && token != null)
-            // {
-            //     var callbackUrl = Url.Action(nameof(ConfirmEmail), "Auth", new { userId = user.Id, token = token }, Request.Scheme);
-            //     // await _emailService.SendEmailAsync(user.Email, "Confirme seu e-mail", $"Por favor, confirme sua conta clicando aqui: <a href='{callbackUrl}'>link</a>");
-            //      _logger.LogInformation("Link de confirmação gerado (precisa ser enviado): {CallbackUrl}", callbackUrl);
-            // }
+            // Enviar e-mail de confirmação após registro bem-sucedido
+            var (identityResult, user, token) = await _authService.GenerateEmailConfirmationTokenAsync(registerDto.Email);
+            if (identityResult.Succeeded && user != null && token != null)
+            {
+                // É crucial que esta URL aponte para o seu FRONTEND, não para a API diretamente.
+                // O frontend então fará uma chamada para o endpoint /confirm-email da API.
+                var frontendConfirmEmailUrl = _resendUrlCallbackSettings.ConfirmEmailUrl; // Ex: "https://meufrontend.com/confirm-email"
+                if (string.IsNullOrWhiteSpace(frontendConfirmEmailUrl))
+                {
+                    _logger.LogError("URL de confirmação de e-mail do frontend não configurada em FrontendUrls:ConfirmEmailUrl.");
+                    // Prosseguir sem enviar e-mail ou retornar um erro específico
+                }
+                else
+                {
+                    var callbackUrl = $"{frontendConfirmEmailUrl}?userId={user.Id}&token={token}"; // token já está UrlEncoded pelo AuthService
+                    _logger.LogInformation("Enviando link de confirmação de e-mail para {UserEmail}. Link: {CallbackUrl}", user.Email, callbackUrl);
+                    await _emailService.SendEmailConfirmationLinkAsync(user.Email, user.UserName, callbackUrl);
+                }
+            }
+            else
+            {
+                _logger.LogWarning("Não foi possível gerar o token de confirmação de e-mail para {UserEmail} após o registro ou usuário não requer.", registerDto.Email);
+            }
 
-
-            // Para registro, geralmente não se retorna o token diretamente, mas uma mensagem de sucesso.
-            // O LoginResponseDto no AuthResult pode ser adaptado para isso.
-            return Ok(result.LoginResponse ?? new LoginResponseDto { Message = "Registro bem-sucedido. Verifique seu e-mail para confirmação." });
+            return Ok(authOperationResult.LoginResponse ?? new LoginResponseDto { Message = "Registro bem-sucedido. Verifique seu e-mail para confirmação." });
         }
 
         [HttpPost("login")]
@@ -86,34 +100,38 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
             {
                 if (result.IsLockedOut || result.IsNotAllowed)
                 {
-                    return Unauthorized(result); // 401 com detalhes
+                    return Unauthorized(result);
                 }
-                return BadRequest(result); // 400 com detalhes
+                return BadRequest(result);
             }
 
             return Ok(result.LoginResponse);
         }
 
-        [HttpGet("external-login")] // Ex: /api/v1/auth/external-login?provider=Google
+        [HttpGet("external-login-challenge")]
         [AllowAnonymous]
-        public async Task<IActionResult> ExternalLogin([FromQuery] string provider)
+        public async Task<IActionResult> ExternalLoginChallenge([FromQuery] string provider)
         {
             if (string.IsNullOrWhiteSpace(provider))
             {
                 return BadRequest(AuthResult.Failed("O nome do provedor externo é obrigatório."));
             }
 
-            // O URL de callback deve ser o endpoint que manipula o resultado do login externo.
-            // Certifique-se que este endpoint está configurado corretamente no seu provedor (Google Console, etc.)
-            // e no Program.cs (options.CallbackPath)
+            // O redirectUrl é o caminho para onde o provedor externo deve retornar APÓS a autenticação.
+            // Este deve ser o endpoint de callback da SUA API, que está configurado no Program.cs e no provedor externo.
+            // Ex: https://jackal-infinite-penguin.ngrok-free.app/signin-google
+            // O Url.Action aqui deve gerar a URL para o método ExternalLoginCallback DESTE controller,
+            // mas o SignInManager usará o CallbackPath configurado no Program.cs para o provedor.
+            // Para maior clareza e para garantir que o redirectUrl usado pelo SignInManager seja o correto,
+            // podemos passar o CallbackPath configurado para o provedor.
+            // No entanto, o SignInManager.ConfigureExternalAuthenticationProperties já usa o CallbackPath definido na autenticação.
+            // Então, o redirectUrl aqui é mais para o caso de querermos passar um estado ou algo assim.
+            // Vamos simplificar e deixar o SignInManager usar o CallbackPath configurado.
             var redirectUrl = Url.Action(nameof(ExternalLoginCallback), "Auth", values: null, protocol: Request.Scheme);
-            if (string.IsNullOrEmpty(redirectUrl))
-            {
-                _logger.LogError("Não foi possível gerar a URL de redirecionamento para o login externo.");
-                return StatusCode(StatusCodes.Status500InternalServerError, AuthResult.Failed("Erro ao iniciar login externo."));
-            }
+            _logger.LogInformation("Gerando desafio para provedor {Provider}. O SignInManager usará o CallbackPath configurado para este provedor.", provider);
 
-            var challenge = await _authService.ChallengeExternalLoginAsync(provider, redirectUrl);
+
+            var challenge = await _authService.ChallengeExternalLoginAsync(provider, redirectUrl!); // redirectUrl aqui é para o Challenge, não necessariamente o que o Google usa para retornar.
 
             if (challenge == null)
             {
@@ -122,40 +140,34 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
             return challenge;
         }
 
-        [HttpGet("external-login-callback")]
+        [HttpGet("~/signin-google")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(LoginResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(AuthResult), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(AuthResult), StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> ExternalLoginCallback()
         {
+            _logger.LogInformation("Recebido callback do login externo (signin-google).");
             var result = await _authService.HandleExternalLoginCallbackAsync();
 
             if (!result.Succeeded)
             {
-                // Se o frontend espera um redirecionamento com o token/erro na query string:
-                // var queryParams = new Dictionary<string, string>();
-                // if (result.LoginResponse?.Token != null) queryParams["token"] = result.LoginResponse.Token;
-                // else queryParams["error"] = result.Errors.FirstOrDefault() ?? "external_login_failed";
-                // return Redirect(QueryHelpers.AddQueryString("https://seu-frontend.com/login-callback", queryParams));
-
-                // Se o frontend faz a chamada e espera um JSON:
                 if (result.IsLockedOut || result.IsNotAllowed)
                 {
                     return Unauthorized(result);
                 }
+                _logger.LogError("Falha no HandleExternalLoginCallbackAsync: {Errors}", string.Join(", ", result.Errors));
                 return BadRequest(result);
             }
 
-            // Similarmente, pode redirecionar ou retornar JSON
             return Ok(result.LoginResponse);
         }
 
         [HttpPost("confirm-email-request")]
-        [AllowAnonymous] // Ou [Authorize] se o usuário já estiver logado mas não confirmado
+        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
-        public async Task<IActionResult> RequestEmailConfirmation([FromBody] ForgotPasswordDto dto) // Reutilizando DTO
+        public async Task<IActionResult> RequestEmailConfirmation([FromBody] ForgotPasswordDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
@@ -163,16 +175,23 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
 
             if (!identityResult.Succeeded || user == null || token == null)
             {
-                // Não revele se o email existe ou não, ou se já está confirmado.
                 _logger.LogWarning("Falha ao gerar token de confirmação de e-mail para {Email} ou e-mail já confirmado/não requer.", dto.Email);
-                return Ok(new { Message = "Se sua conta existir e precisar de confirmação, um e-mail foi enviado." });
             }
-
-            // Construir o link de confirmação. O frontend geralmente lida com isso.
-            // Exemplo: var confirmationLink = $"https://seu-frontend.com/confirm-email?userId={user.Id}&token={token}";
-            // await _emailService.SendEmailAsync(user.Email, "Confirme seu E-mail", $"Clique aqui para confirmar: <a href='{confirmationLink}'>Confirmar</a>");
-            _logger.LogInformation("Token de confirmação de e-mail gerado para {Email}. O frontend deve construir o link e o backend (via EmailService) deve enviá-lo. Token: {Token}", dto.Email, token);
-
+            else
+            {
+                var frontendConfirmEmailUrl = _resendUrlCallbackSettings.ConfirmEmailUrl;
+                if (string.IsNullOrWhiteSpace(frontendConfirmEmailUrl))
+                {
+                    _logger.LogError("URL de confirmação de e-mail do frontend não configurada em FrontendUrls:ConfirmEmailUrl.");
+                }
+                else
+                {
+                    var callbackUrl = $"{frontendConfirmEmailUrl}?userId={user.Id}&token={token}";
+                    _logger.LogInformation("Enviando link de confirmação de e-mail para {UserEmail}. Link: {CallbackUrl}", user.Email, callbackUrl);
+                    await _emailService.SendEmailConfirmationLinkAsync(user.Email, user.UserName, callbackUrl);
+                }
+            }
+            // Sempre retorne uma mensagem genérica para não vazar informações
             return Ok(new { Message = "Se sua conta existir e precisar de confirmação, um e-mail foi enviado com as instruções." });
         }
 
@@ -210,22 +229,27 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
 
             var (identityResult, user, token) = await _authService.GeneratePasswordResetTokenAsync(forgotPasswordDto);
 
-            // Mesmo que identityResult seja sucesso, user e token podem ser null se o usuário não for elegível (externo, não confirmado, não existe)
-            // Isso é para evitar vazamento de informação.
             if (identityResult.Succeeded && user != null && token != null)
             {
-                // O frontend geralmente constrói este link
-                // Exemplo: var resetLink = $"https://seu-frontend.com/reset-password?email={HttpUtility.UrlEncode(user.Email)}&token={token}";
-                // await _emailService.SendPasswordResetLinkAsync(user, resetLink);
-                _logger.LogInformation("Token de reset de senha gerado para {Email}. O frontend deve construir o link e o backend (via EmailService) deve enviá-lo. Token: {Token}", user.Email, token);
+                var frontendResetPasswordUrl = _resendUrlCallbackSettings.ResetPasswordUrl; // Ex: "https://meufrontend.com/reset-password"
+                if (string.IsNullOrWhiteSpace(frontendResetPasswordUrl))
+                {
+                    _logger.LogError("URL de reset de senha do frontend não configurada em FrontendUrls:ResetPasswordUrl.");
+                }
+                else
+                {
+                    // O token já vem UrlEncoded do AuthService
+                    var callbackUrl = $"{frontendResetPasswordUrl}?email={HttpUtility.UrlEncode(user.Email)}&token={token}";
+                    _logger.LogInformation("Enviando link de reset de senha para {UserEmail}. Link: {CallbackUrl}", user.Email, callbackUrl);
+                    await _emailService.SendPasswordResetLinkAsync(user.Email, user.UserName, callbackUrl);
+                }
             }
             else
             {
                 _logger.LogWarning("Geração de token de reset de senha não produziu um token para {Email}, ou o usuário não é elegível.", forgotPasswordDto.Email);
             }
 
-            // Sempre retorne uma mensagem genérica para não vazar se o email existe ou não.
-            return Ok(new { Message = "Se sua conta existir, um e-mail foi enviado com instruções para redefinir sua senha." });
+            return Ok(new { Message = "Se sua conta existir e for elegível, um e-mail foi enviado com instruções para redefinir sua senha." });
         }
 
         [HttpPost("reset-password")]
@@ -248,6 +272,5 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
 
             return Ok(new { Message = "Senha redefinida com sucesso." });
         }
-
     }
 }

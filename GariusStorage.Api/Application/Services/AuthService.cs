@@ -4,7 +4,11 @@ using GariusStorage.Api.Domain.Constants;
 using GariusStorage.Api.Domain.Entities.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Linq;
 using System.Security.Claims;
+using System.Threading.Tasks;
 using System.Web;
 
 namespace GariusStorage.Api.Application.Services
@@ -15,6 +19,7 @@ namespace GariusStorage.Api.Application.Services
         private readonly SignInManager<ApplicationUser> _signInManager;
         private readonly ITokenService _tokenService;
         private readonly ILogger<AuthService> _logger;
+        // IEmailService não é injetado aqui, será usado pelo AuthController ou outro serviço de coordenação
 
         public AuthService(
             UserManager<ApplicationUser> userManager,
@@ -67,14 +72,7 @@ namespace GariusStorage.Api.Application.Services
             _logger.LogInformation("Usuário {Email} registrado com sucesso. Aguardando confirmação de e-mail.", user.Email);
             await _userManager.AddToRoleAsync(user, RoleConstants.UserRoleName); // Adiciona à role padrão
 
-            // Gerar token de confirmação de e-mail e enviar (a ser implementado com IEmailService)
-            // var (_, _, confirmationToken) = await GenerateEmailConfirmationTokenAsync(user.Email);
-            // if (confirmationToken != null)
-            // {
-            //     // string confirmationLink = ConstruirLinkDeConfirmacao(user.Id, confirmationToken, scheme); // scheme viria do controller
-            //     // await _emailService.SendEmailConfirmationLinkAsync(user, confirmationLink);
-            //     _logger.LogInformation("Token de confirmação de e-mail gerado para {Email}. Link precisa ser enviado.", user.Email);
-            // }
+            // A lógica de envio de e-mail será tratada pelo AuthController após este método retornar sucesso.
 
             return AuthResult.Success(new LoginResponseDto { Message = "Registro bem-sucedido. Por favor, verifique seu e-mail para confirmar sua conta." });
         }
@@ -117,7 +115,7 @@ namespace GariusStorage.Api.Application.Services
             if (result.RequiresTwoFactor)
             {
                 _logger.LogInformation("Login para {Username} requer autenticação de dois fatores.", dto.Username);
-                return AuthResult.RequiresTwoFactorAuth();
+                return AuthResult.RequiresTwoFactorAuth(); // Lidar com 2FA no controller/frontend
             }
 
             if (!result.Succeeded)
@@ -196,7 +194,7 @@ namespace GariusStorage.Api.Application.Services
                 {
                     var newUser = new ApplicationUser
                     {
-                        UserName = email,
+                        UserName = email, // Ou gerar um username único se necessário/desejado
                         Email = email,
                         EmailConfirmed = true, // Provedores externos geralmente já confirmam o email
                         IsExternalUser = true,
@@ -390,6 +388,5 @@ namespace GariusStorage.Api.Application.Services
                 return IdentityResult.Failed(new IdentityError { Description = "Token de redefinição inválido ou malformado." });
             }
         }
-
     }
 }

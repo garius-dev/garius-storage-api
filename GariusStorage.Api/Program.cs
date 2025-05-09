@@ -21,7 +21,8 @@ using GariusStorage.Api.Infrastructure.Middleware;
 using GariusStorage.Api.Domain.Interfaces;
 using GariusStorage.Api.Application.Interfaces;
 using GariusStorage.Api.Application.Services;
-using Microsoft.AspNetCore.HttpOverrides; // Adicionar este using
+using Microsoft.AspNetCore.HttpOverrides;
+using System.Net.Http.Headers; // Adicionar este using
 
 // --- CONFIGURAÇÃO DO SERILOG --- //
 Log.Logger = new LoggerConfiguration()
@@ -86,6 +87,12 @@ try
 
     resendSettings = LoadConfigHelper.LoadConfigFromSecret<ResendSettings>(builder.Configuration, "GariusStorageApi--ResendSettings");
     builder.Services.AddSingleton(Options.Create(resendSettings));
+
+    var resendUrlCallbackSettings = LoadConfigHelper.LoadConfigFromSecret<Dictionary<string, string>>(builder.Configuration, "GariusStorageApi--ResendUrlCallbackSettings");
+    var _confirmEmailUrl = resendUrlCallbackSettings[$"{builder.Environment.EnvironmentName}--ConfirmEmailUrl"];
+    var _resetPasswordUrl = resendUrlCallbackSettings[$"{builder.Environment.EnvironmentName}--ResetPasswordUrl"];
+    var resendUrlCallbackSettingsObj = new ResendUrlCallbackSettings(_confirmEmailUrl, _resetPasswordUrl);
+    builder.Services.AddSingleton(Options.Create(resendUrlCallbackSettingsObj));
 
     jwtSettings = LoadConfigHelper.LoadConfigFromSecret<JwtSettings>(builder.Configuration, "MetalFlowScheduler-JwtSettings"); // Atenção: Nome do secret parece ser de outro projeto. Verifique se é o correto.
     builder.Services.AddSingleton(Options.Create(jwtSettings));
@@ -207,6 +214,16 @@ builder.Services.AddAuthentication(options =>
     options.CallbackPath = "/signin-microsoft"; // Ajuste para o seu endpoint de callback da Microsoft
 });
 
+// --- CONFIGURAÇÃO DO HTTPCLIENTFACTORY PARA RESEND --- //
+builder.Services.AddHttpClient("ResendApiClient", client =>
+{
+    client.BaseAddress = new Uri("https://api.resend.com/emails"); // URL base da API do Resend
+    client.DefaultRequestHeaders.Authorization =
+        new AuthenticationHeaderValue("Bearer", resendSettings.ApiKey); // Usa a ApiKey carregada
+    client.DefaultRequestHeaders.Accept.Add(
+        new MediaTypeWithQualityHeaderValue("application/json"));
+});
+
 // --- CONFIGURAÇÃO DO SWAGGER --- //
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -315,8 +332,8 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>(); // Registrar AuthService
-// Adicionar IEmailService e IUserManagementService quando criados
-// builder.Services.AddScoped<IEmailService, EmailService>();
+                                                         // Adicionar IEmailService e IUserManagementService quando criados
+builder.Services.AddScoped<IEmailService, EmailService>();
 // builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 
 

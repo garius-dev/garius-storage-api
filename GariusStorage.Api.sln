@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35828.75 d17.13
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GariusStorage.Api", "GariusStorage.Api\GariusStorage.Api.csproj", "{B3819928-AD08-48C4-A804-2F4A5C6E2C5D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B3819928-AD08-48C4-A804-2F4A5C6E2C5D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3819928-AD08-48C4-A804-2F4A5C6E2C5D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3819928-AD08-48C4-A804-2F4A5C6E2C5D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3819928-AD08-48C4-A804-2F4A5C6E2C5D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {60682C3A-FBB7-42B1-ABBB-148F5F1492D2}
+	EndGlobalSection
+EndGlobal

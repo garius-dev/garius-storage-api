@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 using System.Threading.Tasks;
 using System.Web; // Para HttpUtility.UrlEncode nos links de exemplo
@@ -117,16 +118,6 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
                 return BadRequest(AuthResult.Failed("O nome do provedor externo é obrigatório."));
             }
 
-            // O redirectUrl é o caminho para onde o provedor externo deve retornar APÓS a autenticação.
-            // Este deve ser o endpoint de callback da SUA API, que está configurado no Program.cs e no provedor externo.
-            // Ex: https://jackal-infinite-penguin.ngrok-free.app/signin-google
-            // O Url.Action aqui deve gerar a URL para o método ExternalLoginCallback DESTE controller,
-            // mas o SignInManager usará o CallbackPath configurado no Program.cs para o provedor.
-            // Para maior clareza e para garantir que o redirectUrl usado pelo SignInManager seja o correto,
-            // podemos passar o CallbackPath configurado para o provedor.
-            // No entanto, o SignInManager.ConfigureExternalAuthenticationProperties já usa o CallbackPath definido na autenticação.
-            // Então, o redirectUrl aqui é mais para o caso de querermos passar um estado ou algo assim.
-            // Vamos simplificar e deixar o SignInManager usar o CallbackPath configurado.
             var redirectUrl = Url.Action(nameof(ExternalLoginCallback), "Auth", values: null, protocol: Request.Scheme);
             _logger.LogInformation("Gerando desafio para provedor {Provider}. O SignInManager usará o CallbackPath configurado para este provedor.", provider);
 
@@ -140,27 +131,54 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
             return challenge;
         }
 
-        [HttpGet("~/signin-google")]
+        [HttpGet("external-login-callback")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(LoginResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(AuthResult), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(AuthResult), StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> ExternalLoginCallback()
         {
-            _logger.LogInformation("Recebido callback do login externo (signin-google).");
+            _logger.LogInformation("Recebido callback do login externo.");
             var result = await _authService.HandleExternalLoginCallbackAsync();
+
+            // URL do seu frontend para onde redirecionar após o login
+            //var frontendRedirectUrl = _configuration["FrontendUrls:ExternalLoginCallbackUrl"]; // Ex: "https://SEU_FRONTEND_URL/auth/external-callback"
+            var frontendRedirectUrl = "https://localhost:7015/home/TestesCallback"; // Ex: "https://SEU_FRONTEND_URL/auth/external-callback"
+
+            if (string.IsNullOrWhiteSpace(frontendRedirectUrl))
+            {
+                _logger.LogError("FrontendUrls:ExternalLoginCallbackUrl não está configurada no appsettings.json. Não é possível redirecionar o usuário com o token.");
+                // Como fallback, retorna o JSON, mas isso não é ideal para UX.
+                if (!result.Succeeded) return BadRequest(result);
+                return Ok(result.LoginResponse); // Fallback
+            }
 
             if (!result.Succeeded)
             {
-                if (result.IsLockedOut || result.IsNotAllowed)
-                {
-                    return Unauthorized(result);
-                }
                 _logger.LogError("Falha no HandleExternalLoginCallbackAsync: {Errors}", string.Join(", ", result.Errors));
-                return BadRequest(result);
+                // Redireciona para o frontend com uma mensagem de erro
+                var errorUri = QueryHelpers.AddQueryString(frontendRedirectUrl, "error", result.Errors.FirstOrDefault() ?? "external_login_failed");
+                return Redirect(errorUri);
             }
 
-            return Ok(result.LoginResponse);
+            // Redireciona para o frontend com o token JWT e outras informações no fragmento hash (mais seguro)
+            // ou como query string se preferir.
+            var queryParams = new Dictionary<string, string?>
+            {
+                { "token", result.LoginResponse?.Token },
+                { "userId", result.LoginResponse?.UserId.ToString() },
+                { "username", result.LoginResponse?.Username },
+                { "email", result.LoginResponse?.Email }
+                // Adicione outras informações se necessário
+            };
+
+            // Usando fragmento hash (#) é uma boa prática para tokens, pois não são enviados ao servidor
+            var successUri = frontendRedirectUrl + "#" + string.Join("&", queryParams.Where(kvp => kvp.Value != null).Select(kvp => $"{HttpUtility.UrlEncode(kvp.Key)}={HttpUtility.UrlEncode(kvp.Value)}"));
+            // Ou usando query string:
+            //var successUri = QueryHelpers.AddQueryString(frontendRedirectUrl, queryParams!);
+
+            _logger.LogInformation("Redirecionando para o frontend após login externo bem-sucedido: {SuccessUri}", successUri);
+            return Redirect(successUri);
         }
 
         [HttpPost("confirm-email-request")]

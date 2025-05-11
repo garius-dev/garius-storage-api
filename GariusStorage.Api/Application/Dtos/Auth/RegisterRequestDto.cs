@@ -22,5 +22,8 @@ namespace GariusStorage.Api.Application.Dtos.Auth
         [DataType(DataType.Password)]
         [Compare("Password", ErrorMessage = "A senha e a senha de confirmação não correspondem.")]
         public string ConfirmPassword { get; set; }
+
+        [Required(ErrorMessage = "O token do Turnstile é obrigatório.")]
+        public string TurnstileToken { get; set; } // Novo campo
     }
 }

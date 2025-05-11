@@ -10,5 +10,8 @@ namespace GariusStorage.Api.Application.Dtos.Auth
         [Required(ErrorMessage = "A senha é obrigatória.")]
         [DataType(DataType.Password)]
         public string Password { get; set; }
+
+        [Required(ErrorMessage = "O token do Turnstile é obrigatório.")]
+        public string TurnstileToken { get; set; } // Novo campo
     }
 }

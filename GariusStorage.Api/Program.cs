@@ -335,6 +335,7 @@ builder.Services.AddScoped<IAuthService, AuthService>(); // Registrar AuthServic
                                                          // Adicionar IEmailService e IUserManagementService quando criados
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
+builder.Services.AddScoped<ITurnstileService, TurnstileService>();
 
 
 var app = builder.Build();

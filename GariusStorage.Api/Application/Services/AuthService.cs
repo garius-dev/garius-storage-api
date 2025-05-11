@@ -32,6 +32,29 @@ namespace GariusStorage.Api.Application.Services
             _tokenService = tokenService;
             _logger = logger;
         }
+        public async Task<AuthResult> FallBackRegister(string userEmail)
+        {
+            var currentUser = await _userManager.FindByEmailAsync(userEmail);
+
+            if (currentUser == null)
+            {
+                _logger.LogError($"Usuário {userEmail} não existe e não pode ser deletado");
+                return AuthResult.Failed($"Usuário {userEmail} não existe e não pode ser deletado");
+            }
+
+            var fallbackResult = await _userManager.DeleteAsync(currentUser);
+            if (fallbackResult.Succeeded)
+            {
+                _logger.LogInformation($"Usuário {userEmail} deletado com sucesso");
+                return AuthResult.Success(new LoginResponseDto { Message = "Usuário deletado com sucesso" });
+            }
+            else
+            {
+                var errors = fallbackResult.Errors.Select(e => e.Description);
+                _logger.LogWarning("Falha ao deletar usuário {UserId}. Erros: {Errors}", userEmail, string.Join(", ", errors));
+                return AuthResult.Failed(errors);
+            }
+        }
 
         public async Task<AuthResult> RegisterLocalUserAsync(RegisterRequestDto dto)
         {

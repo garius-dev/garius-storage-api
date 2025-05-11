@@ -8,6 +8,7 @@ namespace GariusStorage.Api.Application.Interfaces
     public interface IAuthService
     {
         Task<AuthResult> RegisterLocalUserAsync(RegisterRequestDto dto);
+        Task<AuthResult> FallBackRegister(string userId);
         Task<AuthResult> LoginLocalAsync(LoginRequestDto dto);
 
         // Para iniciar o fluxo de login externo

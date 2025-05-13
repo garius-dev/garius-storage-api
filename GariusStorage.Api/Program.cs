@@ -88,11 +88,13 @@ try
     resendSettings = LoadConfigHelper.LoadConfigFromSecret<ResendSettings>(builder.Configuration, "GariusStorageApi--ResendSettings");
     builder.Services.AddSingleton(Options.Create(resendSettings));
 
-    var resendUrlCallbackSettings = LoadConfigHelper.LoadConfigFromSecret<Dictionary<string, string>>(builder.Configuration, "GariusStorageApi--ResendUrlCallbackSettings");
-    var _confirmEmailUrl = resendUrlCallbackSettings[$"{builder.Environment.EnvironmentName}--ConfirmEmailUrl"];
-    var _resetPasswordUrl = resendUrlCallbackSettings[$"{builder.Environment.EnvironmentName}--ResetPasswordUrl"];
-    var resendUrlCallbackSettingsObj = new ResendUrlCallbackSettings(_confirmEmailUrl, _resetPasswordUrl);
-    builder.Services.AddSingleton(Options.Create(resendUrlCallbackSettingsObj));
+
+    var urlCallbacksResponse = LoadConfigHelper.LoadConfigFromSecret<Dictionary<string, string>>(builder.Configuration, "GariusStorageApi--UrlCallbackSettings");
+    UrlCallbackSettings urlCallbackSettings = new UrlCallbackSettings(
+            builder.Environment.EnvironmentName,
+            urlCallbacksResponse
+        );
+    builder.Services.AddSingleton(Options.Create(urlCallbackSettings));
 
     jwtSettings = LoadConfigHelper.LoadConfigFromSecret<JwtSettings>(builder.Configuration, "MetalFlowScheduler-JwtSettings"); // Atenção: Nome do secret parece ser de outro projeto. Verifique se é o correto.
     builder.Services.AddSingleton(Options.Create(jwtSettings));

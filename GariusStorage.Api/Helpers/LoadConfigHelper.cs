@@ -8,7 +8,8 @@ namespace GariusStorage.Api.Helpers
         //Método para ler uma Secret e adiciona-la em um objeto para Option Bind
         public static T LoadConfigFromSecret<T>(IConfiguration configuration, string secretName)
         {
-            var secretJson = configuration[secretName] ?? throw new InvalidOperationException($"Segredo '{secretName}' não encontrado ou vazio na configuração.");
+            var secretJson = configuration[secretName] ?? 
+                throw new InvalidOperationException($"Segredo '{secretName}' não encontrado ou vazio na configuração.");
 
             try
             {
@@ -26,37 +27,5 @@ namespace GariusStorage.Api.Helpers
             }
         }
 
-
-        public static ConnectionStringConfig GetConnectionStringForEnvironment(ConnectionStringsConfig config, IHostEnvironment environment)
-        {
-            if (config?.ConnectionStrings == null || !config.ConnectionStrings.Any())
-            {
-                throw new InvalidOperationException("A configuração de ConnectionStrings está vazia ou nula.");
-            }
-
-            // Tenta encontrar a string de conexão para o ambiente atual
-            var connectionString = config.ConnectionStrings
-                                         .FirstOrDefault(cs => cs.Environment.Equals(environment.EnvironmentName, StringComparison.OrdinalIgnoreCase));
-
-            if (connectionString == null)
-            {
-                // Se não encontrar uma para o ambiente específico, tenta encontrar uma marcada como 'Default' (opcional)
-                connectionString = config.ConnectionStrings
-                                         .FirstOrDefault(cs => cs.Environment.Equals("Default", StringComparison.OrdinalIgnoreCase));
-
-                if (connectionString == null)
-                {
-                    throw new InvalidOperationException($"Connection string para o ambiente '{environment.EnvironmentName}' não encontrada na configuração de secrets e nenhuma connection string 'Default' foi fornecida.");
-                }
-
-            }
-
-            if (string.IsNullOrWhiteSpace(connectionString.ConnectionString))
-            {
-                throw new InvalidOperationException($"A connection string encontrada para o ambiente '{connectionString.Environment}' está vazia ou nula.");
-            }
-
-            return connectionString;
-        }
     }
 }

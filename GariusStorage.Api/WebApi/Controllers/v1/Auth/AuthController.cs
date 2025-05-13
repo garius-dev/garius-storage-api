@@ -7,31 +7,40 @@ using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 using System.Web;
 using Microsoft.AspNetCore.WebUtilities;
+using GariusStorage.Api.Configuration;
+using Microsoft.Extensions.Options;
+using GariusStorage.Api.Extensions;
 
 namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
 {
     [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/users")]
     [ApiController]
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
         private readonly IEmailService _emailService;
-        private readonly ITurnstileService _turnstileService; // Adicionar ITurnstileService
+        private readonly ITurnstileService _turnstileService;
         private readonly ILogger<AuthController> _logger;
-        private readonly IConfiguration _configuration;
+        private readonly UrlCallbackSettings _urlCallbackSettings;
 
         public AuthController(
             IAuthService authService,
             IEmailService emailService,
-            ITurnstileService turnstileService, // Adicionar aqui
+            ITurnstileService turnstileService,
             ILogger<AuthController> logger,
-            IConfiguration configuration)
+            IOptions<UrlCallbackSettings> urlCallbackSettings)
         {
             _authService = authService;
             _emailService = emailService;
-            _turnstileService = turnstileService; // Atribuir
+            _turnstileService = turnstileService;
             _logger = logger;
-            _configuration = configuration;
+            _urlCallbackSettings = urlCallbackSettings.Value;
+
+            if(!string.IsNullOrEmpty(_urlCallbackSettings.Environment) && _urlCallbackSettings.UrlCallbacks != null && _urlCallbackSettings.UrlCallbacks.Any())
+            {
+                _urlCallbackSettings.UrlCallbacks.FilterKeysStartingWith(_urlCallbackSettings.Environment);
+            }
         }
 
         [HttpPost("/api/v{version:apiVersion}/auth/register")]
@@ -59,7 +68,7 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
             var (identityResult, user, token) = await _authService.GenerateEmailConfirmationTokenAsync(registerDto.Email);
             if (identityResult.Succeeded && user != null && token != null)
             {
-                var frontendConfirmEmailUrl = _configuration["FrontendUrls:ConfirmEmailUrl"];
+                var frontendConfirmEmailUrl = _urlCallbackSettings.GetValueByKey("ConfirmEmailUrl");
                 if (!string.IsNullOrWhiteSpace(frontendConfirmEmailUrl))
                 {
                     var callbackUrl = $"{frontendConfirmEmailUrl}?userId={user.Id}&token={token}";
@@ -71,7 +80,7 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
                         return BadRequest(new { Message = "Falha ao enviar o e-mail de confirmação. O usuário foi deletado." });
                     }
                 }
-                else _logger.LogError("FrontendUrls:ConfirmEmailUrl não configurada.");
+                else _logger.LogError("ConfirmEmailUrl não configurada.");
             }
             return Ok(authOperationResult.LoginResponse ?? new LoginResponseDto { Message = "Registro bem-sucedido. Verifique seu e-mail para confirmação." });
         }
@@ -139,11 +148,11 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
             _logger.LogInformation("Recebido callback do login externo.");
             var result = await _authService.HandleExternalLoginCallbackAsync();
 
-            var frontendRedirectUrl = "https://localhost:7015/home/TestesCallback";
+            var frontendRedirectUrl = _urlCallbackSettings.GetValueByKey("ExternalLoginReturnUrl");
 
             if (string.IsNullOrWhiteSpace(frontendRedirectUrl))
             {
-                _logger.LogError("FrontendUrls:ExternalLoginCallbackUrl não está configurada no appsettings.json.");
+                _logger.LogError("ExternalLoginCallbackUrl não configurada.");
                 if (!result.Succeeded) return BadRequest(result);
                 return Ok(result.LoginResponse);
             }
@@ -170,9 +179,6 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
 
             var successUri = $"{frontendRedirectUrl}#{fragmentString}";
 
-            //var successUri = QueryHelpers.AddQueryString(frontendRedirectUrl, queryParams!);
-
-
 
             _logger.LogInformation("Redirecionando para o frontend após login externo bem-sucedido: {SuccessUri}", successUri);
             return Redirect(successUri);
@@ -187,13 +193,13 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
             var (identityResult, user, token) = await _authService.GenerateEmailConfirmationTokenAsync(dto.Email);
             if (identityResult.Succeeded && user != null && token != null)
             {
-                var frontendConfirmEmailUrl = _configuration["FrontendUrls:ConfirmEmailUrl"];
+                var frontendConfirmEmailUrl = _urlCallbackSettings.GetValueByKey("ConfirmEmailUrl");
                 if (!string.IsNullOrWhiteSpace(frontendConfirmEmailUrl))
                 {
                     var callbackUrl = $"{frontendConfirmEmailUrl}?userId={user.Id}&token={token}";
                     await _emailService.SendEmailConfirmationLinkAsync(user.Email, user.UserName, callbackUrl);
                 }
-                else _logger.LogError("FrontendUrls:ConfirmEmailUrl não configurada.");
+                else _logger.LogError("ConfirmEmailUrl não configurada.");
             }
             return Ok(new { Message = "Se sua conta existir e precisar de confirmação, um e-mail foi enviado com as instruções." });
         }
@@ -220,13 +226,13 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
             var (identityResult, user, token) = await _authService.GeneratePasswordResetTokenAsync(forgotPasswordDto);
             if (identityResult.Succeeded && user != null && token != null)
             {
-                var frontendResetPasswordUrl = _configuration["FrontendUrls:ResetPasswordUrl"];
+                var frontendResetPasswordUrl = _urlCallbackSettings.GetValueByKey("ResetPasswordUrl");
                 if (!string.IsNullOrWhiteSpace(frontendResetPasswordUrl))
                 {
                     var callbackUrl = $"{frontendResetPasswordUrl}?email={HttpUtility.UrlEncode(user.Email)}&token={token}";
                     await _emailService.SendPasswordResetLinkAsync(user.Email, user.UserName, callbackUrl);
                 }
-                else _logger.LogError("FrontendUrls:ResetPasswordUrl não configurada.");
+                else _logger.LogError("ResetPasswordUrl não configurada.");
             }
             return Ok(new { Message = "Se sua conta existir e for elegível, um e-mail foi enviado com instruções para redefinir sua senha." });
         }

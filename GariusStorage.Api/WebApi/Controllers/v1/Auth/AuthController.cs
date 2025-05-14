@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using GariusStorage.Api.Configuration;
 using Microsoft.Extensions.Options;
 using GariusStorage.Api.Extensions;
+using GariusStorage.Api.Application.Exceptions;
 
 namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
 {
@@ -56,33 +57,37 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
             if (turnstileResult == null || !turnstileResult.Success)
             {
                 _logger.LogWarning("Validação do Turnstile falhou para tentativa de registro. Erros: {ErrorCodes}",
-                    string.Join(", ", turnstileResult?.ErrorCodes ?? new List<string> { "unknown" }));
-                return BadRequest(AuthResult.Failed("Falha na verificação de segurança (CAPTCHA). Por favor, tente novamente."));
+                     string.Join(", ", turnstileResult?.ErrorCodes ?? new List<string> { "unknown" }));
+
+                throw new ValidationException("Falha na verificação de segurança (CAPTCHA). Por favor, tente novamente.", "CAPTCHA_VALIDATION_FAILED");
             }
 
             _logger.LogInformation("Turnstile validado com sucesso para registro. Hostname: {Hostname}", turnstileResult.Hostname);
 
-            var authOperationResult = await _authService.RegisterLocalUserAsync(registerDto);
-            if (!authOperationResult.Succeeded) return BadRequest(authOperationResult);
+            await _authService.RegisterLocalUserAsync(registerDto);
 
-            var (identityResult, user, token) = await _authService.GenerateEmailConfirmationTokenAsync(registerDto.Email);
-            if (identityResult.Succeeded && user != null && token != null)
+            try
             {
-                var frontendConfirmEmailUrl = _urlCallbackSettings.GetValueByKey("ConfirmEmailUrl");
-                if (!string.IsNullOrWhiteSpace(frontendConfirmEmailUrl))
+                var (user, token) = await _authService.GenerateEmailConfirmationTokenAsync(registerDto.Email);
+                var frontendConfirmEmailUrl = _urlCallbackSettings.GetValueByKey("ConfirmEmailUrl") ?? 
+                    throw new OperationFailedException("URL de retorno da confirmação de email não foi encontrada", "URL_CALLBACK_NOT_FOUND");
+
+                var callbackUrl = $"{frontendConfirmEmailUrl}?userId={user.Id}&token={token}";
+                var emailSent = await _emailService.SendEmailConfirmationLinkAsync(user.Email, user.UserName, callbackUrl);
+                if (!emailSent)
                 {
-                    var callbackUrl = $"{frontendConfirmEmailUrl}?userId={user.Id}&token={token}";
-                    var emailResponse = await _emailService.SendEmailConfirmationLinkAsync(user.Email, user.UserName, callbackUrl);
-                    if (!emailResponse)
-                    {
-                        await _authService.FallBackRegister(user.Email);
-                        _logger.LogError("Falha ao enviar o e-mail de confirmação. Usuário foi deletado");
-                        return BadRequest(new { Message = "Falha ao enviar o e-mail de confirmação. O usuário foi deletado." });
-                    }
+                    _logger.LogError("Falha ao enviar o e-mail de confirmação para {Email}. Iniciando fallback para deletar usuário.", registerDto.Email);
+                    await _authService.FallbackRegisterAndDeleteUserAsync(registerDto.Email);
+                    throw new OperationFailedException("Seu registro foi processado, mas houve uma falha ao enviar o e-mail de confirmação. Por favor, tente se registrar novamente.", "EMAIL_CONFIRMATION_SEND_FAILED_ROLLEDBACK");
                 }
-                else _logger.LogError("ConfirmEmailUrl não configurada.");
             }
-            return Ok(authOperationResult.LoginResponse ?? new LoginResponseDto { Message = "Registro bem-sucedido. Verifique seu e-mail para confirmação." });
+            catch (NotFoundException ex)
+            {
+                _logger.LogError(ex, "Erro ao gerar token de confirmação para usuário recém-registrado {Email}. Isso não deveria acontecer.", registerDto.Email);
+                throw new OperationFailedException("Ocorreu um erro ao finalizar seu registro. Por favor, contate o suporte.", "REGISTRATION_FINALIZATION_ERROR_TOKEN_GEN", null, ex);
+            }
+
+            return Ok(new { Message = "Registro bem-sucedido. Por favor, verifique seu e-mail para confirmar sua conta." });
         }
 
         [HttpPost("/api/v{version:apiVersion}/auth/login")]

@@ -1,4 +1,5 @@
 ﻿using GariusStorage.Api.Application.Dtos.Auth;
+using GariusStorage.Api.Application.Exceptions;
 using GariusStorage.Api.Application.Interfaces;
 using GariusStorage.Api.Domain.Constants;
 using GariusStorage.Api.Domain.Entities.Identity;
@@ -32,35 +33,32 @@ namespace GariusStorage.Api.Application.Services
             _tokenService = tokenService;
             _logger = logger;
         }
-        public async Task<AuthResult> FallBackRegister(string userEmail)
+        public async Task FallbackRegisterAndDeleteUserAsync(string userEmail)
         {
             var currentUser = await _userManager.FindByEmailAsync(userEmail);
 
             if (currentUser == null)
             {
                 _logger.LogError($"Usuário {userEmail} não existe e não pode ser deletado");
-                return AuthResult.Failed($"Usuário {userEmail} não existe e não pode ser deletado");
+                //return AuthResult.Failed($"Usuário {userEmail} não existe e não pode ser deletado");
+                throw new NotFoundException($"Usuário com email '{userEmail}' não encontrado para deleção no fallback.", "USER_NOT_FOUND_FOR_FALLBACK_DELETION");
             }
 
             var fallbackResult = await _userManager.DeleteAsync(currentUser);
-            if (fallbackResult.Succeeded)
+            if (!fallbackResult.Succeeded)
             {
-                _logger.LogInformation($"Usuário {userEmail} deletado com sucesso");
-                return AuthResult.Success(new LoginResponseDto { Message = "Usuário deletado com sucesso" });
+                var errors = fallbackResult.Errors.ToDictionary(e => e.Code, e => new[] { e.Description });
+                _logger.LogWarning("Falha ao deletar usuário {UserEmail} no fallback. Erros: {Errors}", userEmail, string.Join(", ", fallbackResult.Errors.Select(e => e.Description)));
+                throw new OperationFailedException($"Falha ao reverter o registro do usuário '{userEmail}'.", "USER_DELETION_FAILED_FALLBACK", errors);
             }
-            else
-            {
-                var errors = fallbackResult.Errors.Select(e => e.Description);
-                _logger.LogWarning("Falha ao deletar usuário {UserId}. Erros: {Errors}", userEmail, string.Join(", ", errors));
-                return AuthResult.Failed(errors);
-            }
+
+            _logger.LogInformation("Usuário {UserEmail} deletado com sucesso no fallback.", userEmail);
         }
 
-        public async Task<AuthResult> RegisterLocalUserAsync(RegisterRequestDto dto)
+        public async Task RegisterLocalUserAsync(RegisterRequestDto dto)
         {
             if (dto.Email != dto.UserName)
             {
-                // Padronizando UserName para ser o Email, conforme configuração do Identity.
                 _logger.LogInformation("Padronizando UserName para o Email fornecido durante o registro: {Email}", dto.Email);
                 dto.UserName = dto.Email;
             }
@@ -69,16 +67,16 @@ namespace GariusStorage.Api.Application.Services
             if (existingUserByEmail != null)
             {
                 _logger.LogWarning("Tentativa de registro com email já existente: {Email}", dto.Email);
-                return AuthResult.Failed("Este email já está registrado.");
+                throw new ConflictException("Este email já está registrado.", "EMAIL_EXISTS");
             }
 
             var user = new ApplicationUser
             {
                 UserName = dto.UserName,
                 Email = dto.Email,
-                IsExternalUser = false, // Usuário local
-                IsActive = true, // Ou false, se a confirmação de email for obrigatória para ativar
-                EmailConfirmed = false, // Requer confirmação de e-mail
+                IsExternalUser = false,
+                IsActive = true,
+                EmailConfirmed = false,
                 CreatedAt = DateTime.UtcNow,
                 LastUpdate = DateTime.UtcNow
             };
@@ -87,38 +85,46 @@ namespace GariusStorage.Api.Application.Services
 
             if (!result.Succeeded)
             {
-                var errors = result.Errors.Select(e => e.Description);
-                _logger.LogWarning("Falha ao registrar usuário {Email}. Erros: {Errors}", dto.Email, string.Join(", ", errors));
-                return AuthResult.Failed(errors);
+                var errors = result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description });
+                _logger.LogWarning("Falha ao registrar usuário {Email}. Erros: {Errors}", dto.Email, string.Join(", ", result.Errors.Select(e => e.Description)));
+                throw new ValidationException(errors);
             }
 
             _logger.LogInformation("Usuário {Email} registrado com sucesso. Aguardando confirmação de e-mail.", user.Email);
-            await _userManager.AddToRoleAsync(user, RoleConstants.UserRoleName); // Adiciona à role padrão
-
-            // A lógica de envio de e-mail será tratada pelo AuthController após este método retornar sucesso.
-
-            return AuthResult.Success(new LoginResponseDto { Message = "Registro bem-sucedido. Por favor, verifique seu e-mail para confirmar sua conta." });
+            var roleResult = await _userManager.AddToRoleAsync(user, RoleConstants.UserRoleName);
+            if (!roleResult.Succeeded)
+            {
+                _logger.LogError("Falha ao adicionar role '{UserRoleName}' ao usuário {Email} recém-registrado. Erros: {Errors}",
+                   RoleConstants.UserRoleName, user.Email, string.Join(", ", roleResult.Errors.Select(e => e.Description)));
+                throw new OperationFailedException($"Falha ao atribuir role padrão ao usuário '{user.Email}'.", "ROLE_ASSIGNMENT_FAILED", roleResult.Errors.ToDictionary(e => e.Code, e => new[] { e.Description }));
+            }
         }
 
-        public async Task<AuthResult> LoginLocalAsync(LoginRequestDto dto)
+        public async Task<LoginResponseDto> LoginLocalAsync(LoginRequestDto dto)
         {
-            var user = await _userManager.FindByNameAsync(dto.Username); // Ou FindByEmailAsync se Username for sempre o email
+            var user = await _userManager.FindByNameAsync(dto.Username);
             if (user == null)
             {
                 _logger.LogWarning("Tentativa de login falhou para o usuário {Username}: Usuário não encontrado.", dto.Username);
-                return AuthResult.Failed("Usuário ou senha inválidos.");
+                throw new PermissionDeniedException("Usuário ou senha inválidos.", "INVALID_CREDENTIALS");
+            }
+
+            if(user.Email == null || user.UserName == null)
+            {
+                _logger.LogWarning("Tentativa de login falhou para o usuário {Username}: Email ou nome de usuário inválidos.", dto.Username);
+                throw new PermissionDeniedException("Usuário ou senha inválidos.", "INVALID_CREDENTIALS");
             }
 
             if (!user.IsActive)
             {
                 _logger.LogWarning("Tentativa de login falhou para o usuário {Username}: Conta inativa.", dto.Username);
-                return AuthResult.Failed("Esta conta está inativa.");
+                throw new PermissionDeniedException("Esta conta está inativa.", "ACCOUNT_INACTIVE");
             }
 
-            if (!user.EmailConfirmed && !user.IsExternalUser) // Somente exige confirmação para usuários locais
+            if (!user.EmailConfirmed && !user.IsExternalUser)
             {
                 _logger.LogWarning("Tentativa de login falhou para o usuário {Username}: Email não confirmado.", dto.Username);
-                return AuthResult.NotAllowed("Por favor, confirme seu endereço de e-mail antes de fazer login.");
+                throw new PermissionDeniedException("Por favor, confirme seu endereço de e-mail antes de fazer login.", "EMAIL_NOT_CONFIRMED");
             }
 
             var result = await _signInManager.CheckPasswordSignInAsync(user, dto.Password, lockoutOnFailure: true);
@@ -126,32 +132,32 @@ namespace GariusStorage.Api.Application.Services
             if (result.IsLockedOut)
             {
                 _logger.LogWarning("Usuário {Username} está bloqueado.", dto.Username);
-                return AuthResult.LockedOut();
+                throw new PermissionDeniedException("Conta bloqueada devido a múltiplas tentativas de login falhas.", "ACCOUNT_LOCKED_OUT");
             }
 
-            if (result.IsNotAllowed) // Pode acontecer por outros motivos além da confirmação de email
+            if (result.IsNotAllowed)
             {
                 _logger.LogWarning("Login não permitido para o usuário {Username}.", dto.Username);
-                return AuthResult.NotAllowed($"Login não permitido para o usuário {dto.Username}.");
+                throw new PermissionDeniedException($"Login não permitido para o usuário {dto.Username}.", "LOGIN_NOT_ALLOWED");
             }
 
             if (result.RequiresTwoFactor)
             {
                 _logger.LogInformation("Login para {Username} requer autenticação de dois fatores.", dto.Username);
-                return AuthResult.RequiresTwoFactorAuth(); // Lidar com 2FA no controller/frontend
+                throw new PermissionDeniedException("Autenticação de dois fatores é necessária.", "2FA_REQUIRED");
             }
 
             if (!result.Succeeded)
             {
                 _logger.LogWarning("Tentativa de login falhou para o usuário {Username}: Senha inválida.", dto.Username);
-                return AuthResult.Failed("Usuário ou senha inválidos.");
+                throw new PermissionDeniedException("Usuário ou senha inválidos.", "INVALID_CREDENTIALS");
             }
 
             _logger.LogInformation("Usuário {Username} logado com sucesso.", dto.Username);
             var roles = await _userManager.GetRolesAsync(user);
             var token = _tokenService.GenerateJwtToken(user, roles);
 
-            return AuthResult.Success(new LoginResponseDto
+            return new LoginResponseDto
             {
                 Token = token,
                 UserId = user.Id,
@@ -159,67 +165,63 @@ namespace GariusStorage.Api.Application.Services
                 Email = user.Email,
                 Roles = roles,
                 Message = "Login bem-sucedido."
-            });
+            };
         }
 
         public Task<ChallengeResult?> ChallengeExternalLoginAsync(string provider, string redirectUrl)
         {
-            // Configura as propriedades para o provedor de login externo
             var properties = _signInManager.ConfigureExternalAuthenticationProperties(provider, redirectUrl);
             return Task.FromResult<ChallengeResult?>(new ChallengeResult(provider, properties));
         }
 
-        public async Task<AuthResult> HandleExternalLoginCallbackAsync()
+        public async Task<LoginResponseDto> HandleExternalLoginCallbackAsync()
         {
             var info = await _signInManager.GetExternalLoginInfoAsync();
+
             if (info == null)
             {
                 _logger.LogError("Não foi possível obter informações do login externo no callback.");
-                return AuthResult.Failed("Não foi possível obter informações do login externo. Tente novamente.");
+                throw new OperationFailedException("Não foi possível obter informações do login externo. Tente novamente.", "EXTERNAL_LOGIN_INFO_ERROR");
             }
 
-            // Tenta logar o usuário com este provedor externo.
-            // O bypassTwoFactor: true é comum aqui porque o 2FA do provedor externo já foi satisfeito.
             var signInResult = await _signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, isPersistent: false, bypassTwoFactor: true);
-
-            ApplicationUser? userToLogin = null;
+            ApplicationUser? userToLogin;
 
             if (signInResult.Succeeded)
             {
                 userToLogin = await _userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
-                if (userToLogin == null) // Deve ser raro, mas por segurança
+                if (userToLogin == null)
                 {
                     _logger.LogError("Usuário não encontrado após ExternalLoginSignInAsync bem-sucedido para {LoginProvider} {ProviderKey}", info.LoginProvider, info.ProviderKey);
-                    return AuthResult.Failed("Ocorreu um erro ao processar seu login externo.");
+                    throw new OperationFailedException("Ocorreu um erro ao processar seu login externo.", "EXTERNAL_LOGIN_USER_NOT_FOUND_POST_SIGNIN");
                 }
                 _logger.LogInformation("Usuário {Email} logado com sucesso via {LoginProvider}.", userToLogin.Email, info.LoginProvider);
             }
             else if (signInResult.IsLockedOut)
             {
                 _logger.LogWarning("Usuário associado ao login externo {LoginProvider} {ProviderKey} está bloqueado.", info.LoginProvider, info.ProviderKey);
-                return AuthResult.LockedOut();
+                throw new PermissionDeniedException("Conta bloqueada.", "ACCOUNT_LOCKED_OUT");
             }
-            else // Usuário não tem um login local ou o login externo não está vinculado
+            else
             {
                 _logger.LogInformation("Usuário não tem login local ou vínculo. Tentando criar ou vincular conta para login externo de {LoginProvider} {ProviderKey}.", info.LoginProvider, info.ProviderKey);
-
                 var email = info.Principal.FindFirstValue(ClaimTypes.Email);
                 if (string.IsNullOrEmpty(email))
                 {
                     _logger.LogError("Email não encontrado nas claims do provedor externo {LoginProvider}.", info.LoginProvider);
-                    return AuthResult.Failed($"Email não fornecido pelo provedor externo '{info.LoginProvider}'. Não é possível criar ou vincular a conta.");
+                    throw new ValidationException("Email não fornecido pelo provedor externo. Não é possível criar ou vincular a conta.", "EXTERNAL_LOGIN_NO_EMAIL");
                 }
 
                 var existingUser = await _userManager.FindByEmailAsync(email);
                 IdentityResult identityResult;
 
-                if (existingUser == null) // Usuário não existe, cria um novo
+                if (existingUser == null)
                 {
                     var newUser = new ApplicationUser
                     {
-                        UserName = email, // Ou gerar um username único se necessário/desejado
+                        UserName = email,
                         Email = email,
-                        EmailConfirmed = true, // Provedores externos geralmente já confirmam o email
+                        EmailConfirmed = true,
                         IsExternalUser = true,
                         IsActive = true,
                         FirstName = info.Principal.FindFirstValue(ClaimTypes.GivenName),
@@ -227,65 +229,59 @@ namespace GariusStorage.Api.Application.Services
                         CreatedAt = DateTime.UtcNow,
                         LastUpdate = DateTime.UtcNow
                     };
+
                     identityResult = await _userManager.CreateAsync(newUser);
+
                     if (!identityResult.Succeeded)
                     {
                         _logger.LogError("Falha ao criar novo usuário via login externo {Email}. Erros: {Errors}", email, string.Join(", ", identityResult.Errors.Select(e => e.Description)));
-                        return AuthResult.Failed(identityResult.Errors.Select(e => e.Description));
+                        throw new ValidationException(identityResult.Errors.ToDictionary(e => e.Code, e => new[] { e.Description }));
                     }
-                    await _userManager.AddToRoleAsync(newUser, RoleConstants.UserRoleName); // Adiciona à role padrão
+
+                    var roleResult = await _userManager.AddToRoleAsync(newUser, RoleConstants.UserRoleName);
+
+                    if (!roleResult.Succeeded)
+                    {
+                        _logger.LogError("Falha ao adicionar role padrão ao novo usuário externo {Email}. Erros: {Errors}", newUser.Email, string.Join(", ", roleResult.Errors.Select(e => e.Description)));
+                        throw new OperationFailedException($"Falha ao atribuir role padrão ao usuário externo '{newUser.Email}'.", "EXTERNAL_USER_ROLE_ASSIGNMENT_FAILED", roleResult.Errors.ToDictionary(e => e.Code, e => new[] { e.Description }));
+                    }
+
                     userToLogin = newUser;
+
                     _logger.LogInformation("Novo usuário {Email} criado via login externo {LoginProvider}.", email, info.LoginProvider);
                 }
-                else // Usuário já existe com este email
+                else
                 {
                     if (!existingUser.IsActive)
                     {
                         _logger.LogWarning("Tentativa de login externo para usuário inativo {Email}.", email);
-                        return AuthResult.Failed("Esta conta está inativa.");
+                        throw new PermissionDeniedException("Esta conta está inativa.", "ACCOUNT_INACTIVE");
                     }
-                    // Se o usuário existente foi criado localmente, você pode querer impedi-lo de vincular
-                    // ou ter uma lógica para mesclar/avisar. Por enquanto, vamos permitir o vínculo.
-                    if (!existingUser.IsExternalUser)
-                    {
-                        _logger.LogInformation("Usuário {Email} existente (local) sendo vinculado a login externo {LoginProvider}.", email, info.LoginProvider);
-                        // Opcional: Atualizar IsExternalUser para true ou ter uma flag mista.
-                        // existingUser.IsExternalUser = true; // Decida a política aqui
-                        // await _userManager.UpdateAsync(existingUser);
-                    }
+
                     userToLogin = existingUser;
                 }
 
-                // Vincula o login externo ao usuário (novo ou existente)
                 identityResult = await _userManager.AddLoginAsync(userToLogin, info);
-                if (!identityResult.Succeeded)
+
+                if (!identityResult.Succeeded && !identityResult.Errors.Any(e => e.Code == "LoginAlreadyAssociated"))
                 {
                     _logger.LogError("Falha ao vincular login externo de {LoginProvider} ao usuário {Email}. Erros: {Errors}", info.LoginProvider, userToLogin.Email, string.Join(", ", identityResult.Errors.Select(e => e.Description)));
-                    // Não necessariamente um AuthResult.Failed aqui, pois o usuário pode já ter esse login vinculado de uma tentativa anterior que falhou em outra etapa.
-                    // Se o erro for 'LoginAlreadyAssociated', podemos prosseguir.
-                    if (!identityResult.Errors.Any(e => e.Code == "LoginAlreadyAssociated"))
-                    {
-                        return AuthResult.Failed(identityResult.Errors.Select(e => e.Description));
-                    }
-                    _logger.LogInformation("Login externo de {LoginProvider} para o usuário {Email} já estava associado.", info.LoginProvider, userToLogin.Email);
+                    throw new OperationFailedException("Falha ao vincular login externo.", "EXTERNAL_LOGIN_LINK_FAILED", identityResult.Errors.ToDictionary(e => e.Code, e => new[] { e.Description }));
                 }
-                else
-                {
-                    _logger.LogInformation("Login externo de {LoginProvider} vinculado com sucesso ao usuário {Email}.", info.LoginProvider, userToLogin.Email);
-                }
+
+                _logger.LogInformation("Login externo de {LoginProvider} vinculado com sucesso (ou já estava vinculado) ao usuário {Email}.", info.LoginProvider, userToLogin.Email);
             }
 
-            if (userToLogin == null) // Se, por algum motivo, userToLogin não foi definido
+            if (userToLogin == null)
             {
                 _logger.LogError("Falha crítica: userToLogin não foi definido após o fluxo de login externo.");
-                return AuthResult.Failed("Ocorreu um erro inesperado durante o login externo.");
+                throw new OperationFailedException("Ocorreu um erro inesperado durante o login externo.", "EXTERNAL_LOGIN_UNEXPECTED_STATE");
             }
-
 
             var roles = await _userManager.GetRolesAsync(userToLogin);
             var token = _tokenService.GenerateJwtToken(userToLogin, roles);
 
-            return AuthResult.Success(new LoginResponseDto
+            return new LoginResponseDto
             {
                 Token = token,
                 UserId = userToLogin.Id,
@@ -293,48 +289,60 @@ namespace GariusStorage.Api.Application.Services
                 Email = userToLogin.Email,
                 Roles = roles,
                 Message = "Login externo bem-sucedido."
-            });
+            };
         }
 
-        public async Task<(IdentityResult result, ApplicationUser? user, string? token)> GenerateEmailConfirmationTokenAsync(string email)
+        public async Task<(ApplicationUser user, string token)> GenerateEmailConfirmationTokenAsync(string email)
         {
             var user = await _userManager.FindByEmailAsync(email);
-            if (user == null || user.IsExternalUser) // Não envia para usuários externos ou inexistentes
+            if (user == null)
             {
-                _logger.LogWarning("Tentativa de gerar token de confirmação para email não encontrado ou usuário externo: {Email}", email);
-                return (IdentityResult.Failed(new IdentityError { Description = "Usuário não encontrado ou não requer confirmação de e-mail." }), null, null);
+                _logger.LogWarning("Tentativa de gerar token de confirmação para email não encontrado: {Email}", email);
+                throw new NotFoundException($"Usuário com email '{email}' não encontrado.", "USER_NOT_FOUND");
             }
-
+            if (user.IsExternalUser)
+            {
+                _logger.LogInformation("Usuário externo {Email} não requer confirmação de e-mail local.", email);
+                throw new ValidationException("Usuários externos não requerem confirmação de e-mail por este método.", "EXTERNAL_USER_NO_CONFIRMATION_NEEDED");
+            }
             if (user.EmailConfirmed)
             {
                 _logger.LogInformation("Email {Email} já está confirmado. Nenhum token de confirmação gerado.", email);
-                return (IdentityResult.Success, user, null); // Ou um erro específico
+                throw new ValidationException("Este email já foi confirmado.", "EMAIL_ALREADY_CONFIRMED");
             }
 
             var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-            var encodedToken = HttpUtility.UrlEncode(token); // Importante para URLs
+            var encodedToken = HttpUtility.UrlEncode(token);
             _logger.LogInformation("Token de confirmação de e-mail gerado para {Email}.", email);
-            return (IdentityResult.Success, user, encodedToken);
+            return (user, encodedToken);
         }
 
-        public async Task<IdentityResult> ConfirmEmailAsync(ConfirmEmailDto dto)
+        public async Task ConfirmEmailAsync(ConfirmEmailDto dto)
         {
             if (string.IsNullOrEmpty(dto.UserId) || string.IsNullOrEmpty(dto.Token))
             {
-                return IdentityResult.Failed(new IdentityError { Description = "ID do usuário e token são obrigatórios." });
+                // Usando o construtor ValidationException(dictionary, message, errorCode)
+                throw new ValidationException(
+                    new Dictionary<string, string[]> {
+                        { nameof(dto.UserId), new[]{"O ID do usuário é obrigatório."} },
+                        { nameof(dto.Token), new[]{"O token de confirmação é obrigatório."} }
+                    },
+                    "Dados para confirmação de e-mail incompletos.",
+                    "CONFIRM_EMAIL_DATA_INCOMPLETE"
+                );
             }
 
             var user = await _userManager.FindByIdAsync(dto.UserId);
             if (user == null)
             {
                 _logger.LogWarning("Tentativa de confirmar email para UserId inválido: {UserId}", dto.UserId);
-                return IdentityResult.Failed(new IdentityError { Description = "Usuário não encontrado." });
+                throw new NotFoundException($"Usuário com ID '{dto.UserId}' não encontrado.", "USER_NOT_FOUND");
             }
 
             if (user.EmailConfirmed)
             {
                 _logger.LogInformation("Email {Email} já estava confirmado. Nenhuma ação tomada.", user.Email);
-                return IdentityResult.Success; // Ou um erro/mensagem específica
+                return;
             }
 
             try
@@ -342,73 +350,80 @@ namespace GariusStorage.Api.Application.Services
                 var decodedToken = HttpUtility.UrlDecode(dto.Token);
                 var result = await _userManager.ConfirmEmailAsync(user, decodedToken);
 
-                if (result.Succeeded)
-                {
-                    user.LastUpdate = DateTime.UtcNow;
-                    await _userManager.UpdateAsync(user); // Salva LastUpdate
-                    _logger.LogInformation("Email {Email} confirmado com sucesso para o usuário {UserId}.", user.Email, user.Id);
-                }
-                else
+                if (!result.Succeeded)
                 {
                     _logger.LogWarning("Falha ao confirmar email para {Email}. Erros: {Errors}", user.Email, string.Join(", ", result.Errors.Select(e => e.Description)));
+                    throw new ValidationException(result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description }), "Falha ao validar o token de confirmação de e-mail.", "EMAIL_CONFIRMATION_TOKEN_INVALID");
                 }
-                return result;
+
+                user.LastUpdate = DateTime.UtcNow;
+                await _userManager.UpdateAsync(user);
+                _logger.LogInformation("Email {Email} confirmado com sucesso para o usuário {UserId}.", user.Email, user.Id);
             }
-            catch (Exception ex) // Captura exceções de decodificação, etc.
+            catch (Exception ex)
             {
                 _logger.LogError(ex, "Erro ao decodificar o token de confirmação de e-mail para o usuário {UserId}.", dto.UserId);
-                return IdentityResult.Failed(new IdentityError { Description = "Token de confirmação inválido ou malformado." });
+                throw new ValidationException("Token de confirmação inválido ou malformado.", "INVALID_CONFIRMATION_TOKEN_FORMAT");
             }
         }
 
-        public async Task<(IdentityResult result, ApplicationUser? user, string? token)> GeneratePasswordResetTokenAsync(ForgotPasswordDto dto)
+        public async Task<(ApplicationUser user, string token)> GeneratePasswordResetTokenAsync(ForgotPasswordDto dto)
         {
             var user = await _userManager.FindByEmailAsync(dto.Email);
-            if (user == null || user.IsExternalUser || !user.EmailConfirmed) // Não permite reset para externos ou email não confirmado
+            if (user == null)
             {
-                // Não revele se o usuário existe ou não por segurança.
-                _logger.LogWarning("Tentativa de reset de senha para email não elegível: {Email}", dto.Email);
-                // Retornamos sucesso para não vazar informação se o email existe ou não, mas não enviamos email.
-                // O controller pode decidir como lidar com isso (ex: mensagem genérica).
-                return (IdentityResult.Success, null, null); // Alterado para não indicar falha diretamente ao chamador interno
+                _logger.LogWarning("Tentativa de reset de senha para email não encontrado: {Email}", dto.Email);
+                throw new NotFoundException($"Nenhuma conta encontrada para o email '{dto.Email}'.", "USER_NOT_FOUND_FOR_RESET");
+            }
+            if (user.IsExternalUser)
+            {
+                _logger.LogWarning("Tentativa de reset de senha para usuário externo: {Email}", dto.Email);
+                throw new ValidationException("Não é possível redefinir a senha para contas externas por este método.", "EXTERNAL_USER_NO_PASSWORD_RESET");
+            }
+            if (!user.EmailConfirmed)
+            {
+                _logger.LogWarning("Tentativa de reset de senha para email não confirmado: {Email}", dto.Email);
+                throw new ValidationException("Confirme seu endereço de e-mail antes de redefinir a senha.", "EMAIL_NOT_CONFIRMED_FOR_RESET");
             }
 
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
             var encodedToken = HttpUtility.UrlEncode(token);
             _logger.LogInformation("Token de reset de senha gerado para {Email}.", dto.Email);
-            return (IdentityResult.Success, user, encodedToken);
+            return (user, encodedToken);
         }
 
-        public async Task<IdentityResult> ResetPasswordAsync(ResetPasswordDto dto)
+        public async Task ResetPasswordAsync(ResetPasswordDto dto)
         {
             var user = await _userManager.FindByEmailAsync(dto.Email);
-            if (user == null || user.IsExternalUser)
+            if (user == null)
             {
-                // Novamente, não revele a existência do usuário.
-                _logger.LogWarning("Tentativa de reset de senha para email não elegível no passo de reset: {Email}", dto.Email);
-                return IdentityResult.Failed(new IdentityError { Description = "Falha ao redefinir a senha. Tente novamente." }); // Mensagem genérica
+                _logger.LogWarning("Tentativa de reset de senha para email não encontrado no passo de reset: {Email}", dto.Email);
+                throw new ValidationException("Falha ao redefinir a senha. O link pode ser inválido ou ter expirado.", "PASSWORD_RESET_FAILED");
+            }
+            if (user.IsExternalUser)
+            {
+                _logger.LogWarning("Tentativa de reset de senha para usuário externo no passo de reset: {Email}", dto.Email);
+                throw new ValidationException("Não é possível redefinir a senha para contas externas.", "EXTERNAL_USER_NO_PASSWORD_RESET");
             }
 
             try
             {
                 var decodedToken = HttpUtility.UrlDecode(dto.Token);
                 var result = await _userManager.ResetPasswordAsync(user, decodedToken, dto.NewPassword);
-                if (result.Succeeded)
-                {
-                    user.LastUpdate = DateTime.UtcNow;
-                    await _userManager.UpdateAsync(user);
-                    _logger.LogInformation("Senha redefinida com sucesso para {Email}.", dto.Email);
-                }
-                else
+                if (!result.Succeeded)
                 {
                     _logger.LogWarning("Falha ao redefinir senha para {Email}. Erros: {Errors}", dto.Email, string.Join(", ", result.Errors.Select(e => e.Description)));
+                    throw new ValidationException(result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description }), "Falha na validação ao redefinir senha.", "PASSWORD_RESET_VALIDATION_FAILED");
                 }
-                return result;
+
+                user.LastUpdate = DateTime.UtcNow;
+                await _userManager.UpdateAsync(user);
+                _logger.LogInformation("Senha redefinida com sucesso para {Email}.", dto.Email);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erro ao decodificar o token de reset de senha para o usuário {Email}.", dto.Email);
-                return IdentityResult.Failed(new IdentityError { Description = "Token de redefinição inválido ou malformado." });
+                throw new ValidationException("Token de redefinição inválido ou malformado.", "INVALID_RESET_TOKEN_FORMAT");
             }
         }
     }

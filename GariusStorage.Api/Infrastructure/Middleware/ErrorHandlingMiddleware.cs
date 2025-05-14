@@ -9,11 +9,13 @@ namespace GariusStorage.Api.Infrastructure.Middleware
     {
         private readonly RequestDelegate _next;
         private readonly ILogger<ErrorHandlingMiddleware> _logger;
+        private readonly IHostEnvironment _env;
 
-        public ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorHandlingMiddleware> logger)
+        public ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorHandlingMiddleware> logger, IHostEnvironment env)
         {
             _next = next;
             _logger = logger;
+            _env = env;
         }
 
         public async Task InvokeAsync(HttpContext httpContext)
@@ -72,6 +74,13 @@ namespace GariusStorage.Api.Infrastructure.Middleware
                     detail = argumentNullException.Message;
                     errorCode = "ARGUMENT_NULL";
                     break;
+                case OperationFailedException operationFailedException: // Novo case
+                    statusCode = HttpStatusCode.BadRequest; // Ou Conflict (409) / UnprocessableEntity (422) dependendo da semântica desejada
+                    title = "A operação não pôde ser concluída.";
+                    detail = operationFailedException.Message;
+                    errorCode = operationFailedException.ErrorCode;
+                    errors = operationFailedException.Details;
+                    break;
                 // Adicione outros tipos de exceção customizadas aqui
                 // case CustomBusinessException businessException:
                 //     statusCode = HttpStatusCode.BadRequest; // ou outro código apropriado
@@ -81,10 +90,10 @@ namespace GariusStorage.Api.Infrastructure.Middleware
                 //     break;
                 default:
                     // Para exceções não customizadas (erros inesperados)
+                    title = "Ocorreu um erro inesperado no servidor.";
                     // Em produção, evite expor detalhes internos da exceção padrão.
-                    // Apenas o título genérico e o status 500 são suficientes.
-                    // detail = context.RequestServices.GetRequiredService<IHostEnvironment>().IsDevelopment() ? exception.ToString() : "Ocorreu um erro inesperado.";
-                    detail = "Ocorreu um erro inesperado."; // Mantendo simples por enquanto
+                    detail = "Um erro inesperado ocorreu. Tente novamente mais tarde."; //_env.IsDevelopment() ? exception.ToString() : "Um erro inesperado ocorreu. Tente novamente mais tarde.";
+                    errorCode = "UNEXPECTED_ERROR";
                     break;
             }
 

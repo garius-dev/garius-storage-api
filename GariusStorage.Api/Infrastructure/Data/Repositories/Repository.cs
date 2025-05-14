@@ -3,7 +3,7 @@ using GariusStorage.Api.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 
-namespace GariusStorage.Api.Infrastructure.Data.Migrations
+namespace GariusStorage.Api.Infrastructure.Data.Repositories
 {
     public class Repository<T> : IRepository<T> where T : BaseEntity
     {
@@ -26,8 +26,6 @@ namespace GariusStorage.Api.Infrastructure.Data.Migrations
             entity.LastUpdate = now;
 
             await _dbSet.AddAsync(entity);
-            await _context.SaveChangesAsync();
-
             return entity;
         }
 
@@ -44,7 +42,6 @@ namespace GariusStorage.Api.Infrastructure.Data.Migrations
             }
 
             await _dbSet.AddRangeAsync(entities);
-            await _context.SaveChangesAsync();
         }
 
         public async Task<bool> ExistsAsync(Expression<Func<T, bool>> predicate)
@@ -62,11 +59,9 @@ namespace GariusStorage.Api.Infrastructure.Data.Migrations
             return await _dbSet.ToListAsync();
         }
 
-
         public virtual async Task<T?> GetByIdAsync(Guid id)
         {
-            if(id == Guid.Empty) throw new ArgumentNullException(nameof(id));
-
+            if (id == Guid.Empty) throw new ArgumentNullException(nameof(id), "O ID da entidade não pode ser vazio.");
             return await _dbSet.FindAsync(id);
         }
 
@@ -75,7 +70,7 @@ namespace GariusStorage.Api.Infrastructure.Data.Migrations
             return _context.Set<T>().AsQueryable();
         }
 
-        public virtual async Task Remove(T entity)
+        public virtual Task Remove(T entity)
         {
             if (entity == null) throw new ArgumentNullException(nameof(entity));
 
@@ -83,20 +78,19 @@ namespace GariusStorage.Api.Infrastructure.Data.Migrations
             {
                 _dbSet.Attach(entity);
             }
-
             _dbSet.Remove(entity);
-            await _context.SaveChangesAsync();
+            return Task.CompletedTask;
         }
 
-        public virtual async Task RemoveRange(IEnumerable<T> entities)
+        public virtual Task RemoveRange(IEnumerable<T> entities)
         {
             if (entities == null || !entities.Any()) throw new ArgumentNullException(nameof(entities));
 
             _dbSet.RemoveRange(entities);
-            await _context.SaveChangesAsync();
+            return Task.CompletedTask;
         }
 
-        public virtual async Task<T> Update(T entity)
+        public virtual Task<T> Update(T entity)
         {
             if (entity == null) throw new ArgumentNullException(nameof(entity));
 
@@ -105,9 +99,7 @@ namespace GariusStorage.Api.Infrastructure.Data.Migrations
             _dbSet.Attach(entity);
             _context.Entry(entity).State = EntityState.Modified;
 
-            await _context.SaveChangesAsync();
-
-            return entity;
+            return Task.FromResult(entity);
         }
     }
 }

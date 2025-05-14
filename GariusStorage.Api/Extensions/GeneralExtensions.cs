@@ -18,7 +18,7 @@ namespace GariusStorage.Api.Extensions
             return dict;
         }
 
-        public static string GetValueByKey(this UrlCallbackSettings dict, string key)
+        public static string? GetValueByKey(this UrlCallbackSettings dict, string key)
         {
             key = dict.Environment + "--" + key;
 
@@ -26,7 +26,7 @@ namespace GariusStorage.Api.Extensions
             {
                 return value;
             }
-            return "/";
+            return null;
         }
     }
 }

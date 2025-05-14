@@ -386,9 +386,17 @@ namespace GariusStorage.Api.Application.Services
                 throw new ValidationException("Confirme seu endereço de e-mail antes de redefinir a senha.", "EMAIL_NOT_CONFIRMED_FOR_RESET");
             }
 
-            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var token = await _userManager.GeneratePasswordResetTokenAsync(user);       
             var encodedToken = HttpUtility.UrlEncode(token);
+
             _logger.LogInformation("Token de reset de senha gerado para {Email}.", dto.Email);
+
+            if(user == null || string.IsNullOrEmpty(token))
+            {
+                _logger.LogWarning($"Usuário ou token de reset não são válidos: User = {(user == null ? "NULL" : "VALID")} e Token = {token}");
+                throw new OperationFailedException("Usuário ou token de reset não são válidos", "USER_OR_TOKEN_NOT_VALID");
+            }
+
             return (user, encodedToken);
         }
 

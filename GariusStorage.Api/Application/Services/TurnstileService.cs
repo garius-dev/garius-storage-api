@@ -1,4 +1,5 @@
 ﻿using GariusStorage.Api.Application.Dtos;
+using GariusStorage.Api.Application.Exceptions;
 using GariusStorage.Api.Application.Interfaces;
 using GariusStorage.Api.Configuration;
 using Microsoft.Extensions.Options;
@@ -34,7 +35,8 @@ namespace GariusStorage.Api.Application.Services
             if (string.IsNullOrWhiteSpace(token))
             {
                 _logger.LogWarning("Token do Turnstile fornecido para validação está vazio.");
-                return new TurnstileVerificationResponseDto { Success = false, ErrorCodes = new List<string> { "missing-input-response" } };
+                throw new ValidationException("O token de verificação (CAPTCHA) é obrigatório.", "CAPTCHA_TOKEN_MISSING",
+                    new Dictionary<string, string[]> { { "turnstileToken", new[] { "O token do Turnstile é obrigatório." } } });
             }
 
             var httpClient = _httpClientFactory.CreateClient("CloudflareTurnstileClient");
@@ -50,58 +52,58 @@ namespace GariusStorage.Api.Application.Services
                 parameters.Add("remoteip", remoteIp);
             }
 
+            HttpResponseMessage response;
             try
             {
-                // Cloudflare espera os parâmetros como form-urlencoded
                 var requestContent = new FormUrlEncodedContent(parameters);
-
-                var response = await httpClient.PostAsync(CloudflareSiteVerifyUrl, requestContent);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var verificationResponse = await response.Content.ReadFromJsonAsync<TurnstileVerificationResponseDto>();
-                    if (verificationResponse == null)
-                    {
-                        _logger.LogError("Falha ao desserializar a resposta de verificação do Turnstile. Resposta vazia.");
-                        return new TurnstileVerificationResponseDto { Success = false, ErrorCodes = new List<string> { "deserialization-error" } };
-                    }
-
-                    if (!verificationResponse.Success)
-                    {
-                        _logger.LogWarning("Validação do Turnstile falhou. Token: {Token}. Erros: {ErrorCodes}",
-                            token,
-                            string.Join(", ", verificationResponse.ErrorCodes ?? new List<string>()));
-                    }
-                    else
-                    {
-                        _logger.LogInformation("Token do Turnstile validado com sucesso. Hostname: {Hostname}, Timestamp: {Timestamp}",
-                            verificationResponse.Hostname, verificationResponse.ChallengeTimestamp);
-                    }
-                    return verificationResponse;
-                }
-                else
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogError("Erro ao chamar a API de verificação do Turnstile. Status: {StatusCode}. Resposta: {ErrorContent}",
-                        response.StatusCode, errorContent);
-                    return new TurnstileVerificationResponseDto { Success = false, ErrorCodes = new List<string> { $"http-error-{(int)response.StatusCode}" } };
-                }
+                response = await httpClient.PostAsync(CloudflareSiteVerifyUrl, requestContent);
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Exceção de HttpRequest ao validar token do Turnstile.");
-                return new TurnstileVerificationResponseDto { Success = false, ErrorCodes = new List<string> { "http-request-exception" } };
+                _logger.LogError(ex, "Exceção de HttpRequest ao validar token do Turnstile com Cloudflare.");
+                throw new OperationFailedException("Falha na comunicação com o serviço de verificação CAPTCHA. Tente novamente mais tarde.", "CAPTCHA_SERVICE_UNAVAILABLE", null, ex);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogError("Erro ao chamar a API de verificação do Turnstile. Status: {StatusCode}. Resposta: {ErrorContent}",
+                    response.StatusCode, errorContent);
+                throw new OperationFailedException($"Falha ao verificar o token CAPTCHA (HTTP {(int)response.StatusCode}).", "CAPTCHA_API_HTTP_ERROR");
+            }
+
+            TurnstileVerificationResponseDto? verificationResponse;
+            try
+            {
+                verificationResponse = await response.Content.ReadFromJsonAsync<TurnstileVerificationResponseDto>();
             }
             catch (JsonException ex)
             {
-                _logger.LogError(ex, "Exceção de JSON ao desserializar resposta do Turnstile.");
-                return new TurnstileVerificationResponseDto { Success = false, ErrorCodes = new List<string> { "json-exception" } };
+                _logger.LogError(ex, "Falha ao desserializar a resposta de verificação do Turnstile.");
+                throw new OperationFailedException("Falha ao processar a resposta do serviço de verificação CAPTCHA.", "CAPTCHA_RESPONSE_DESERIALIZATION_ERROR", null, ex);
             }
-            catch (Exception ex)
+
+            if (verificationResponse == null)
             {
-                _logger.LogError(ex, "Exceção inesperada ao validar token do Turnstile.");
-                return new TurnstileVerificationResponseDto { Success = false, ErrorCodes = new List<string> { "unexpected-exception" } };
+                _logger.LogError("Resposta de verificação do Turnstile desserializada para null.");
+                throw new OperationFailedException("Resposta inválida do serviço de verificação CAPTCHA.", "CAPTCHA_NULL_RESPONSE");
             }
+
+            if (!verificationResponse.Success)
+            {
+                _logger.LogWarning("Validação do Turnstile falhou. Token: {Token}. Erros: {ErrorCodes}",
+                    token, // Não logar o token em produção se for sensível
+                    string.Join(", ", verificationResponse.ErrorCodes ?? new List<string>()));
+
+                // Mapear error-codes do Turnstile para ValidationException se apropriado
+                var errorDetails = verificationResponse.ErrorCodes?.ToDictionary(ec => ec, ec => new[] { $"Turnstile error: {ec}" });
+                throw new ValidationException("Falha na verificação de segurança (CAPTCHA).", "CAPTCHA_VERIFICATION_FAILED", errorDetails);
+            }
+
+            _logger.LogInformation("Token do Turnstile validado com sucesso. Hostname: {Hostname}, Timestamp: {Timestamp}",
+                verificationResponse.Hostname, verificationResponse.ChallengeTimestamp);
+
+            return verificationResponse;
         }
     }
 }

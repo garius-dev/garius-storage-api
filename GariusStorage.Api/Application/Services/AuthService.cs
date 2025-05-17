@@ -394,7 +394,7 @@ namespace GariusStorage.Api.Application.Services
             if(user == null || string.IsNullOrEmpty(token))
             {
                 _logger.LogWarning($"Usuário ou token de reset não são válidos: User = {(user == null ? "NULL" : "VALID")} e Token = {token}");
-                throw new OperationFailedException("Usuário ou token de reset não são válidos", "USER_OR_TOKEN_NOT_VALID");
+                throw new PermissionDeniedException("Usuário ou token de reset não são válidos", "USER_OR_TOKEN_NOT_VALID");
             }
 
             return (user, encodedToken);

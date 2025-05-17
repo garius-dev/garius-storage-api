@@ -60,6 +60,12 @@ namespace GariusStorage.Api.WebApi.Controllers.v1.Auth
             var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString();
             // ValidateTokenAsync agora lança exceção em caso de falha.
             var turnstileResult = await _turnstileService.ValidateTokenAsync(registerDto.TurnstileToken, remoteIp);
+
+            if (turnstileResult == null)
+            {
+                throw new ArgumentNullException("Falha ao retornaro o Turnstile token", "TURNSTILE_TOKEN_ERROR");
+            }
+
             _logger.LogInformation("Turnstile validado com sucesso para registro. Hostname: {Hostname}", turnstileResult.Hostname);
 
             // AuthService.RegisterLocalUserAsync agora retorna Task (void) ou lança exceção

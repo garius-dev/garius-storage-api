@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using GariusStorage.Api.Domain.Interfaces;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace GariusStorage.Api.Domain.Entities
@@ -9,7 +10,7 @@ namespace GariusStorage.Api.Domain.Entities
         Exit = 2
     }
 
-    public class CashFlows : BaseEntity
+    public class CashFlows : BaseEntity, ITenantEntity
     {
         public Guid? SaleId { get; set; }
 
@@ -32,5 +33,12 @@ namespace GariusStorage.Api.Domain.Entities
 
         [MaxLength(500)]
         public string? Description { get; set; }
+
+        // Propriedades para Multi-Tenancy
+        [Required]
+        public Guid CompanyId { get; set; }
+
+        [ForeignKey("CompanyId")]
+        public Companies Company { get; set; }
     }
 }

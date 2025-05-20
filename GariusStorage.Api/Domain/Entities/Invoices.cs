@@ -1,9 +1,10 @@
 ﻿using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
+using GariusStorage.Api.Domain.Interfaces;
 
 namespace GariusStorage.Api.Domain.Entities
 {
-    public class Invoices : BaseEntity
+    public class Invoices : BaseEntity, ITenantEntity
     {
         [Required]
         public Guid SaleId { get; set; }
@@ -42,5 +43,12 @@ namespace GariusStorage.Api.Domain.Entities
 
         [MaxLength(4000)]
         public string? RejectionReason { get; set; } // Motivo de rejeição, se houver
+
+        // Propriedades para Multi-Tenancy
+        [Required]
+        public Guid CompanyId { get; set; }
+
+        [ForeignKey("CompanyId")]
+        public Companies Company { get; set; }
     }
 }

@@ -1,9 +1,10 @@
 ﻿using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
+using GariusStorage.Api.Domain.Interfaces;
 
 namespace GariusStorage.Api.Domain.Entities
 {
-    public class Sales : BaseEntity
+    public class Sales : BaseEntity, ITenantEntity
     {
         [Required]
         public Guid SellerId { get; set; }
@@ -29,5 +30,12 @@ namespace GariusStorage.Api.Domain.Entities
         public ICollection<StockMovements> StockMovements { get; set; } = new List<StockMovements>();
         public ICollection<CashFlows> CashFlows { get; set; } = new List<CashFlows>();
         public ICollection<Invoices> Invoices { get; set; } = new List<Invoices>();
+
+        // Propriedades para Multi-Tenancy
+        [Required]
+        public Guid CompanyId { get; set; }
+
+        [ForeignKey("CompanyId")]
+        public Companies Company { get; set; }
     }
 }

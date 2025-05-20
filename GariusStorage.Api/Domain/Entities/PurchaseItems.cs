@@ -1,9 +1,10 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using GariusStorage.Api.Domain.Interfaces;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace GariusStorage.Api.Domain.Entities
 {
-    public class PurchaseItems : BaseEntity
+    public class PurchaseItems : BaseEntity, ITenantEntity
     {
         [Required]
         public Guid PurchaseId { get; set; }
@@ -24,5 +25,12 @@ namespace GariusStorage.Api.Domain.Entities
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal TotalCost { get; set; }
+
+        // Propriedades para Multi-Tenancy
+        [Required]
+        public Guid CompanyId { get; set; }
+
+        [ForeignKey("CompanyId")]
+        public Companies Company { get; set; }
     }
 }

@@ -1,4 +1,7 @@
-﻿using GariusStorage.Api.Domain.Entities.Identity;
+﻿using GariusStorage.Api.Application.Interfaces;
+using GariusStorage.Api.Domain.Entities;
+using GariusStorage.Api.Domain.Entities.Identity;
+using GariusStorage.Api.Domain.Interfaces;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -6,14 +9,251 @@ namespace GariusStorage.Api.Infrastructure.Data
 {
     public class ApplicationDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, Guid>
     {
-        // public DbSet<Product> Products { get; set; }
+        private readonly ITenantResolverService? _tenantResolver;
 
-        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
+        // Propriedade para armazenar o CompanyId do tenant atual
+        public Guid? CurrentCompanyId { get; private set; }
+
+        // DbSets para as entidades de domínio
+        public DbSet<CashFlows> CashFlows { get; set; }
+        public DbSet<Categories> Categories { get; set; }
+        public DbSet<Companies> Companies { get; set; }
+        public DbSet<Currencies> Currencies { get; set; }
+        public DbSet<Customers> Customers { get; set; }
+        public DbSet<Invoices> Invoices { get; set; }
+        public DbSet<Products> Products { get; set; }
+        public DbSet<PurchaseItems> PurchaseItems { get; set; }
+        public DbSet<Purchases> Purchases { get; set; }
+        public DbSet<SaleItems> SaleItems { get; set; }
+        public DbSet<Sales> Sales { get; set; }
+        public DbSet<Sellers> Sellers { get; set; }
+        public DbSet<StockMovements> StockMovements { get; set; }
+        public DbSet<Stocks> Stocks { get; set; }
+        public DbSet<StorageLocations> StorageLocations { get; set; }
+        public DbSet<Suppliers> Suppliers { get; set; }
+
+        // Construtor para uso em design-time (migrações) sem o resolver
+        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
+        {
+            // CurrentCompanyId permanecerá null, o que é útil para migrações
+            // ou cenários onde o tenant não é aplicável.
+        }
+
+        // Construtor para uso em runtime com o resolver
+        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, ITenantResolverService tenantResolver) : base(options)
+        {
+            _tenantResolver = tenantResolver;
+            CurrentCompanyId = _tenantResolver?.GetCurrentCompanyId();
+        }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-            // --- Configurações Específicas ---
+
+            // Configuração da relação CompanyId para ApplicationUser
+            modelBuilder.Entity<ApplicationUser>(entity =>
+            {
+                entity.HasOne(u => u.Company)
+                      .WithMany() // Se Companies não tiver uma ICollection<ApplicationUser>
+                      .HasForeignKey(u => u.CompanyId)
+                      .OnDelete(DeleteBehavior.SetNull); // Se a empresa for deletada, CompanyId do usuário vira null
+            });
+
+            // Configuração das relações e Filtros Globais para entidades ITenantEntity
+            ConfigureTenantSpecificEntity<CashFlows>(modelBuilder, "CashFlows");
+            ConfigureTenantSpecificEntity<Categories>(modelBuilder, "Categories");
+            ConfigureTenantSpecificEntity<Customers>(modelBuilder, "Customers");
+            ConfigureTenantSpecificEntity<Invoices>(modelBuilder, "Invoices");
+            ConfigureTenantSpecificEntity<Products>(modelBuilder, "Products");
+            ConfigureTenantSpecificEntity<PurchaseItems>(modelBuilder, "PurchaseItems");
+            ConfigureTenantSpecificEntity<Purchases>(modelBuilder, "Purchases");
+            ConfigureTenantSpecificEntity<SaleItems>(modelBuilder, "SaleItems");
+            ConfigureTenantSpecificEntity<Sales>(modelBuilder, "Sales");
+            ConfigureTenantSpecificEntity<Sellers>(modelBuilder, "Sellers");
+            ConfigureTenantSpecificEntity<StockMovements>(modelBuilder, "StockMovements");
+            ConfigureTenantSpecificEntity<Stocks>(modelBuilder, "Stocks");
+            ConfigureTenantSpecificEntity<StorageLocations>(modelBuilder, "StorageLocations");
+            ConfigureTenantSpecificEntity<Suppliers>(modelBuilder, "Suppliers");
+
+            // Entidades que podem ser globais ou necessitam de tratamento especial (ex: Currencies)
+            // Se Currencies também for por CompanyId, adicione-a ao ConfigureTenantSpecificEntity
+            // modelBuilder.Entity<Currencies>().HasQueryFilter(c => c.CompanyId == CurrentCompanyId || CurrentCompanyId == null);
+
+
+            // Configurações específicas adicionais que você já tinha ou precisa:
+
+            // CashFlows (relações com Sale e Purchase)
+            modelBuilder.Entity<CashFlows>(entity =>
+            {
+                entity.HasOne(d => d.Sale)
+                    .WithMany(p => p.CashFlows)
+                    .HasForeignKey(d => d.SaleId)
+                    .OnDelete(DeleteBehavior.Cascade); // Ou Restrict/SetNull conforme sua regra
+                entity.HasOne(d => d.Purchase)
+                    .WithMany(p => p.CashFlows)
+                    .HasForeignKey(d => d.PurchaseId)
+                    .OnDelete(DeleteBehavior.Cascade); // Ou Restrict/SetNull
+            });
+
+            // Categories (relação ParentCategory)
+            modelBuilder.Entity<Categories>(entity =>
+            {
+                entity.HasOne(d => d.ParentCategory)
+                    .WithMany() // Se Categories tiver ICollection<Categories> SubCategories, use .WithMany(p => p.SubCategories)
+                    .HasForeignKey(d => d.ParentCategoryId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Invoices (relação com Sale)
+            modelBuilder.Entity<Invoices>(entity =>
+            {
+                entity.HasOne(d => d.Sale)
+                    .WithMany(p => p.Invoices)
+                    .HasForeignKey(d => d.SaleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Products (relação com Category)
+            modelBuilder.Entity<Products>(entity =>
+            {
+                entity.HasOne(d => d.Category)
+                    .WithMany(p => p.Products)
+                    .HasForeignKey(d => d.CategoryId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // PurchaseItems (relações com Purchase e Product)
+            modelBuilder.Entity<PurchaseItems>(entity =>
+            {
+                entity.HasOne(d => d.Purchase)
+                    .WithMany(p => p.Items)
+                    .HasForeignKey(d => d.PurchaseId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(d => d.Product)
+                    .WithMany()
+                    .HasForeignKey(d => d.ProductId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Purchases (relação com Supplier)
+            modelBuilder.Entity<Purchases>(entity =>
+            {
+                entity.HasOne(d => d.Supplier)
+                    .WithMany(p => p.Purchases)
+                    .HasForeignKey(d => d.SupplierId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // SaleItems (relações com Sale e Product)
+            modelBuilder.Entity<SaleItems>(entity =>
+            {
+                entity.HasOne(d => d.Sale)
+                    .WithMany(p => p.Items)
+                    .HasForeignKey(d => d.SaleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(d => d.Product)
+                    .WithMany()
+                    .HasForeignKey(d => d.ProductId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Sales (relações com Seller e Customer)
+            modelBuilder.Entity<Sales>(entity =>
+            {
+                entity.HasOne(d => d.Seller)
+                    .WithMany(p => p.Sales)
+                    .HasForeignKey(d => d.SellerId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(d => d.Customer)
+                    .WithMany(p => p.Sales)
+                    .HasForeignKey(d => d.CustomerId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // StockMovements (relações com Product, Sale, Purchase)
+            modelBuilder.Entity<StockMovements>(entity =>
+            {
+                entity.HasOne(d => d.Product)
+                    .WithMany()
+                    .HasForeignKey(d => d.ProductId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(d => d.Sale)
+                    .WithMany(p => p.StockMovements)
+                    .HasForeignKey(d => d.SaleId)
+                    .IsRequired(false) // Permite SaleId nulo
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(d => d.Purchase)
+                    .WithMany(p => p.StockMovements)
+                    .HasForeignKey(d => d.PurchaseId)
+                    .IsRequired(false) // Permite PurchaseId nulo
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Stocks (relações com Product e StorageLocation)
+            modelBuilder.Entity<Stocks>(entity =>
+            {
+                entity.HasOne(d => d.Product)
+                    .WithMany()
+                    .HasForeignKey(d => d.ProductId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(d => d.StorageLocation)
+                    .WithMany(p => p.Stocks)
+                    .HasForeignKey(d => d.StorageLocationId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Decimal precision for all relevant properties
+            SetDecimalPrecision(modelBuilder);
+        }
+
+        private void ConfigureTenantSpecificEntity<TEntity>(ModelBuilder modelBuilder, string collectionNameInCompany)
+            where TEntity : BaseEntity, ITenantEntity
+        {
+            modelBuilder.Entity<TEntity>(entity =>
+            {                
+                entity.HasOne(e => e.Company)
+                      .WithMany(collectionNameInCompany)
+                      .HasForeignKey(e => e.CompanyId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasQueryFilter(e => e.CompanyId == CurrentCompanyId || CurrentCompanyId == null);
+            });
+        }
+
+        private void SetDecimalPrecision(ModelBuilder modelBuilder)
+        {
+            // CashFlows
+            modelBuilder.Entity<CashFlows>().Property(p => p.Amount).HasColumnType("decimal(18,2)");
+
+            // Invoices
+            modelBuilder.Entity<Invoices>().Property(p => p.TotalAmount).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Invoices>().Property(p => p.TaxAmount).HasColumnType("decimal(18,2)");
+
+            // Products
+            modelBuilder.Entity<Products>().Property(p => p.Price).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Products>().Property(p => p.Cost).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Products>().Property(p => p.TaxQuantityPerUnit).HasColumnType("decimal(18,4)");
+            modelBuilder.Entity<Products>().Property(p => p.ICMS_Rate).HasColumnType("decimal(5,2)");
+            modelBuilder.Entity<Products>().Property(p => p.PIS_Rate).HasColumnType("decimal(5,2)");
+            modelBuilder.Entity<Products>().Property(p => p.COFINS_Rate).HasColumnType("decimal(5,2)");
+            modelBuilder.Entity<Products>().Property(p => p.IPI_Rate).HasColumnType("decimal(5,2)");
+            modelBuilder.Entity<Products>().Property(p => p.Weight).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Products>().Property(p => p.NetWeight).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Products>().Property(p => p.GrossWeight).HasColumnType("decimal(18,2)");
+
+            // PurchaseItems
+            modelBuilder.Entity<PurchaseItems>().Property(p => p.UnitCost).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<PurchaseItems>().Property(p => p.TotalCost).HasColumnType("decimal(18,2)");
+
+            // Purchases
+            modelBuilder.Entity<Purchases>().Property(p => p.TotalAmount).HasColumnType("decimal(18,2)");
+
+            // SaleItems
+            modelBuilder.Entity<SaleItems>().Property(p => p.UnitPrice).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<SaleItems>().Property(p => p.TotalPrice).HasColumnType("decimal(18,2)");
+
+            // Sales
+            modelBuilder.Entity<Sales>().Property(p => p.TotalAmount).HasColumnType("decimal(18,2)");
         }
     }
 }

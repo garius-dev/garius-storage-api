@@ -11,11 +11,8 @@ namespace GariusStorage.Api.Infrastructure.Data
     public class ApplicationDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, Guid>
     {
         private readonly ITenantResolverService? _tenantResolver;
-
-        // Propriedade para armazenar o CompanyId do tenant atual
         public Guid? CurrentCompanyId { get; private set; }
 
-        // DbSets para as entidades de domínio
         public DbSet<CashFlows> CashFlows { get; set; }
         public DbSet<Categories> Categories { get; set; }
         public DbSet<Companies> Companies { get; set; }
@@ -33,14 +30,11 @@ namespace GariusStorage.Api.Infrastructure.Data
         public DbSet<StorageLocations> StorageLocations { get; set; }
         public DbSet<Suppliers> Suppliers { get; set; }
 
-        // Construtor para uso em design-time (migrações) sem o resolver
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
         {
-            // CurrentCompanyId permanecerá null, o que é útil para migrações
-            // ou cenários onde o tenant não é aplicável.
+
         }
 
-        // Construtor para uso em runtime com o resolver
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, ITenantResolverService tenantResolver) : base(options)
         {
             _tenantResolver = tenantResolver;
@@ -51,25 +45,24 @@ namespace GariusStorage.Api.Infrastructure.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // Configuração da relação CompanyId para ApplicationUser
             modelBuilder.Entity<ApplicationUser>(entity =>
             {
                 entity.HasOne(u => u.Company)
-                      .WithMany(c => c.Users) // Se Companies não tiver uma ICollection<ApplicationUser>
+                      .WithMany(c => c.Users)
                       .HasForeignKey(u => u.CompanyId)
-                      .OnDelete(DeleteBehavior.SetNull); // Se a empresa for deletada, CompanyId do usuário vira null
+                      .OnDelete(DeleteBehavior.SetNull);
             });
 
             modelBuilder.Entity<Companies>(entity =>
             {
-                entity.HasOne(c => c.DefaultCurrency) // A Company tem uma DefaultCurrency
-                      .WithMany() // Uma Currency pode ser a DefaultCurrency para muitas Companies (sem propriedade de navegação inversa em Currencies para isso)
-                      .HasForeignKey(c => c.DefaultCurrencyId) // A chave estrangeira em Companies
-                      .IsRequired(false) // DefaultCurrencyId é anulável
-                      .OnDelete(DeleteBehavior.SetNull); // Se a Currency for deletada, DefaultCurrencyId em Company vira null
+                entity.HasOne(c => c.DefaultCurrency)
+                      .WithMany()
+                      .HasForeignKey(c => c.DefaultCurrencyId)
+                      .IsRequired(false)
+                      .OnDelete(DeleteBehavior.SetNull);
             });
 
-            // Configuração das relações e Filtros Globais para entidades ITenantEntity
+
             ConfigureTenantSpecificEntity<CashFlows>(modelBuilder, c => c.CashFlows);
             ConfigureTenantSpecificEntity<Categories>(modelBuilder, c => c.Categories);
             ConfigureTenantSpecificEntity<Customers>(modelBuilder, c => c.Customers);
@@ -85,31 +78,24 @@ namespace GariusStorage.Api.Infrastructure.Data
             ConfigureTenantSpecificEntity<StorageLocations>(modelBuilder, c => c.StorageLocations);
             ConfigureTenantSpecificEntity<Suppliers>(modelBuilder, c => c.Suppliers);
 
-            // Entidades que podem ser globais ou necessitam de tratamento especial (ex: Currencies)
-            // Se Currencies também for por CompanyId, adicione-a ao ConfigureTenantSpecificEntity
-            // modelBuilder.Entity<Currencies>().HasQueryFilter(c => c.CompanyId == CurrentCompanyId || CurrentCompanyId == null);
 
-
-            // Configurações específicas adicionais que você já tinha ou precisa:
-
-            // CashFlows (relações com Sale e Purchase)
             modelBuilder.Entity<CashFlows>(entity =>
             {
                 entity.HasOne(d => d.Sale)
                     .WithMany(p => p.CashFlows)
                     .HasForeignKey(d => d.SaleId)
-                    .OnDelete(DeleteBehavior.Cascade); // Ou Restrict/SetNull conforme sua regra
+                    .OnDelete(DeleteBehavior.Cascade);
                 entity.HasOne(d => d.Purchase)
                     .WithMany(p => p.CashFlows)
                     .HasForeignKey(d => d.PurchaseId)
-                    .OnDelete(DeleteBehavior.Cascade); // Ou Restrict/SetNull
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // Categories (relação ParentCategory)
             modelBuilder.Entity<Categories>(entity =>
             {
                 entity.HasOne(d => d.ParentCategory)
-                    .WithMany() // Se Categories tiver ICollection<Categories> SubCategories, use .WithMany(p => p.SubCategories)
+                    .WithMany()
                     .HasForeignKey(d => d.ParentCategoryId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
@@ -218,15 +204,15 @@ namespace GariusStorage.Api.Infrastructure.Data
 
         private void ConfigureTenantSpecificEntity<TEntity>(
             ModelBuilder modelBuilder,
-            Expression<Func<Companies, IEnumerable<TEntity>?>> navigationExpression) // Updated nullability
+            Expression<Func<Companies, IEnumerable<TEntity>?>> navigationExpression)
             where TEntity : BaseEntity, ITenantEntity
         {
             modelBuilder.Entity<TEntity>(entity =>
             {
                 entity.HasOne(e => e.Company)
-                      .WithMany(navigationExpression) // Updated to match nullability
+                      .WithMany(navigationExpression)
                       .HasForeignKey(e => e.CompanyId)
-                      .OnDelete(DeleteBehavior.Cascade); // Cascade delete for tenant entities when Company is deleted
+                      .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasQueryFilter(e => e.CompanyId == CurrentCompanyId || CurrentCompanyId == null);
             });

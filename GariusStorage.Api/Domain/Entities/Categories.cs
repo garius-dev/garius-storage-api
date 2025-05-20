@@ -16,8 +16,9 @@ namespace GariusStorage.Api.Domain.Entities
         [ForeignKey("ParentCategoryId")]
         public Categories? ParentCategory { get; set; }
 
-
-        public ICollection<Products> Products { get; set; } = new List<Products>();
+        // Coleção para subcategorias, para o relacionamento bidirecional
+        public ICollection<Categories> SubCategories { get; set; } = [];
+        public ICollection<Products> Products { get; set; } = [];
 
         // Propriedades para Multi-Tenancy
         [Required]

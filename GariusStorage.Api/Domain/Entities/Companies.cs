@@ -1,5 +1,7 @@
-﻿using GariusStorage.Api.Helpers;
+﻿using GariusStorage.Api.Domain.Entities.Identity;
+using GariusStorage.Api.Helpers;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace GariusStorage.Api.Domain.Entities
 {
@@ -32,18 +34,28 @@ namespace GariusStorage.Api.Domain.Entities
         [MaxLength(255)]
         public string? ImageUrl { get; set; }
 
+        // Chave estrangeira para a moeda padrão
+        public Guid? DefaultCurrencyId { get; set; }
 
-        public ICollection<Products> Products { get; set; } = new List<Products>();
-        public ICollection<Stocks> Stocks { get; set; } = new List<Stocks>();
-        public ICollection<StockMovements> StockMovements { get; set; } = new List<StockMovements>();
-        public ICollection<CashFlows> CashFlows { get; set; } = new List<CashFlows>();
-        public ICollection<Categories> Categories { get; set; } = new List<Categories>();
-        public ICollection<Suppliers> Suppliers { get; set; } = new List<Suppliers>();
-        public ICollection<Purchases> Purchases { get; set; } = new List<Purchases>();
-        public ICollection<Sales> Sales { get; set; } = new List<Sales>();
-        public ICollection<Sellers> Sellers { get; set; } = new List<Sellers>();
-        public ICollection<Invoices> Invoices { get; set; } = new List<Invoices>();
-        public ICollection<StorageLocations> StorageLocations { get; set; } = new List<StorageLocations>();
-        public ICollection<Currencies> Currencies { get; set; } = new List<Currencies>();
+        // Propriedade de navegação para a moeda padrão
+        [ForeignKey("DefaultCurrencyId")]
+        public Currencies? DefaultCurrency { get; set; }
+
+        public ICollection<ApplicationUser> Users { get; set; } = [];
+        public ICollection<Products> Products { get; set; } = [];
+        public ICollection<Customers> Customers { get; set; } = [];
+        public ICollection<Stocks> Stocks { get; set; } = [];
+        public ICollection<StockMovements> StockMovements { get; set; } = [];
+        public ICollection<CashFlows> CashFlows { get; set; } = [];
+        public ICollection<Categories> Categories { get; set; } = [];
+        public ICollection<Suppliers> Suppliers { get; set; } = [];
+        public ICollection<Purchases> Purchases { get; set; } = [];
+        public ICollection<PurchaseItems> PurchaseItems { get; set; } = [];
+        public ICollection<Sales> Sales { get; set; } = [];
+        public ICollection<SaleItems> SaleItems { get; set; } = [];
+        public ICollection<Sellers> Sellers { get; set; } = [];
+        public ICollection<Invoices> Invoices { get; set; } = [];
+        public ICollection<StorageLocations> StorageLocations { get; set; } = [];
+        //public ICollection<Currencies> Currencies { get; set; } = new List<Currencies>();
     }
 }

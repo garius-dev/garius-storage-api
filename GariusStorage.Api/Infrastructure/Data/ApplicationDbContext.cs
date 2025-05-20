@@ -4,6 +4,7 @@ using GariusStorage.Api.Domain.Entities.Identity;
 using GariusStorage.Api.Domain.Interfaces;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 
 namespace GariusStorage.Api.Infrastructure.Data
 {
@@ -54,26 +55,35 @@ namespace GariusStorage.Api.Infrastructure.Data
             modelBuilder.Entity<ApplicationUser>(entity =>
             {
                 entity.HasOne(u => u.Company)
-                      .WithMany() // Se Companies não tiver uma ICollection<ApplicationUser>
+                      .WithMany(c => c.Users) // Se Companies não tiver uma ICollection<ApplicationUser>
                       .HasForeignKey(u => u.CompanyId)
                       .OnDelete(DeleteBehavior.SetNull); // Se a empresa for deletada, CompanyId do usuário vira null
             });
 
+            modelBuilder.Entity<Companies>(entity =>
+            {
+                entity.HasOne(c => c.DefaultCurrency) // A Company tem uma DefaultCurrency
+                      .WithMany() // Uma Currency pode ser a DefaultCurrency para muitas Companies (sem propriedade de navegação inversa em Currencies para isso)
+                      .HasForeignKey(c => c.DefaultCurrencyId) // A chave estrangeira em Companies
+                      .IsRequired(false) // DefaultCurrencyId é anulável
+                      .OnDelete(DeleteBehavior.SetNull); // Se a Currency for deletada, DefaultCurrencyId em Company vira null
+            });
+
             // Configuração das relações e Filtros Globais para entidades ITenantEntity
-            ConfigureTenantSpecificEntity<CashFlows>(modelBuilder, "CashFlows");
-            ConfigureTenantSpecificEntity<Categories>(modelBuilder, "Categories");
-            ConfigureTenantSpecificEntity<Customers>(modelBuilder, "Customers");
-            ConfigureTenantSpecificEntity<Invoices>(modelBuilder, "Invoices");
-            ConfigureTenantSpecificEntity<Products>(modelBuilder, "Products");
-            ConfigureTenantSpecificEntity<PurchaseItems>(modelBuilder, "PurchaseItems");
-            ConfigureTenantSpecificEntity<Purchases>(modelBuilder, "Purchases");
-            ConfigureTenantSpecificEntity<SaleItems>(modelBuilder, "SaleItems");
-            ConfigureTenantSpecificEntity<Sales>(modelBuilder, "Sales");
-            ConfigureTenantSpecificEntity<Sellers>(modelBuilder, "Sellers");
-            ConfigureTenantSpecificEntity<StockMovements>(modelBuilder, "StockMovements");
-            ConfigureTenantSpecificEntity<Stocks>(modelBuilder, "Stocks");
-            ConfigureTenantSpecificEntity<StorageLocations>(modelBuilder, "StorageLocations");
-            ConfigureTenantSpecificEntity<Suppliers>(modelBuilder, "Suppliers");
+            ConfigureTenantSpecificEntity<CashFlows>(modelBuilder, c => c.CashFlows);
+            ConfigureTenantSpecificEntity<Categories>(modelBuilder, c => c.Categories);
+            ConfigureTenantSpecificEntity<Customers>(modelBuilder, c => c.Customers);
+            ConfigureTenantSpecificEntity<Invoices>(modelBuilder, c => c.Invoices);
+            ConfigureTenantSpecificEntity<Products>(modelBuilder, c => c.Products);
+            ConfigureTenantSpecificEntity<PurchaseItems>(modelBuilder, c => c.PurchaseItems);
+            ConfigureTenantSpecificEntity<Purchases>(modelBuilder, c => c.Purchases);
+            ConfigureTenantSpecificEntity<SaleItems>(modelBuilder, c => c.SaleItems);
+            ConfigureTenantSpecificEntity<Sales>(modelBuilder, c => c.Sales);
+            ConfigureTenantSpecificEntity<Sellers>(modelBuilder, c => c.Sellers);
+            ConfigureTenantSpecificEntity<StockMovements>(modelBuilder, c => c.StockMovements);
+            ConfigureTenantSpecificEntity<Stocks>(modelBuilder, c => c.Stocks);
+            ConfigureTenantSpecificEntity<StorageLocations>(modelBuilder, c => c.StorageLocations);
+            ConfigureTenantSpecificEntity<Suppliers>(modelBuilder, c => c.Suppliers);
 
             // Entidades que podem ser globais ou necessitam de tratamento especial (ex: Currencies)
             // Se Currencies também for por CompanyId, adicione-a ao ConfigureTenantSpecificEntity
@@ -206,21 +216,23 @@ namespace GariusStorage.Api.Infrastructure.Data
             SetDecimalPrecision(modelBuilder);
         }
 
-        private void ConfigureTenantSpecificEntity<TEntity>(ModelBuilder modelBuilder, string collectionNameInCompany)
+        private void ConfigureTenantSpecificEntity<TEntity>(
+            ModelBuilder modelBuilder,
+            Expression<Func<Companies, IEnumerable<TEntity>?>> navigationExpression) // Updated nullability
             where TEntity : BaseEntity, ITenantEntity
         {
             modelBuilder.Entity<TEntity>(entity =>
-            {                
+            {
                 entity.HasOne(e => e.Company)
-                      .WithMany(collectionNameInCompany)
+                      .WithMany(navigationExpression) // Updated to match nullability
                       .HasForeignKey(e => e.CompanyId)
-                      .OnDelete(DeleteBehavior.Cascade);
+                      .OnDelete(DeleteBehavior.Cascade); // Cascade delete for tenant entities when Company is deleted
 
                 entity.HasQueryFilter(e => e.CompanyId == CurrentCompanyId || CurrentCompanyId == null);
             });
         }
 
-        private void SetDecimalPrecision(ModelBuilder modelBuilder)
+        private static void SetDecimalPrecision(ModelBuilder modelBuilder)
         {
             // CashFlows
             modelBuilder.Entity<CashFlows>().Property(p => p.Amount).HasColumnType("decimal(18,2)");

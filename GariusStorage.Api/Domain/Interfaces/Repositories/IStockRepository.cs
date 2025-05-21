@@ -2,7 +2,7 @@
 
 namespace GariusStorage.Api.Domain.Interfaces.Repositories
 {
-    public interface IStockRepository : IRepository<Stocks>
+    public interface IStockRepository : IRepository<Stock>
     {
     }
 }

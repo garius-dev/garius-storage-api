@@ -36,6 +36,12 @@ namespace GariusStorage.Api.Application.Services
                 claims.Add(new Claim(ClaimTypes.Role, role));
             }
 
+            // Adicionar CompanyId como claim, se existir
+            if (user.CompanyId.HasValue && user.CompanyId.Value != Guid.Empty)
+            {
+                claims.Add(new Claim("company_id", user.CompanyId.Value.ToString()));
+            }
+
             if (additionalClaims != null)
             {
                 claims.AddRange(additionalClaims);

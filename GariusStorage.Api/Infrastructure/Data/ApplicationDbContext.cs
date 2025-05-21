@@ -13,22 +13,22 @@ namespace GariusStorage.Api.Infrastructure.Data
         private readonly ITenantResolverService? _tenantResolver;
         public Guid? CurrentCompanyId { get; private set; }
 
-        public DbSet<CashFlows> CashFlows { get; set; }
-        public DbSet<Categories> Categories { get; set; }
-        public DbSet<Companies> Companies { get; set; }
-        public DbSet<Currencies> Currencies { get; set; }
-        public DbSet<Customers> Customers { get; set; }
-        public DbSet<Invoices> Invoices { get; set; }
-        public DbSet<Products> Products { get; set; }
-        public DbSet<PurchaseItems> PurchaseItems { get; set; }
-        public DbSet<Purchases> Purchases { get; set; }
-        public DbSet<SaleItems> SaleItems { get; set; }
-        public DbSet<Sales> Sales { get; set; }
-        public DbSet<Sellers> Sellers { get; set; }
-        public DbSet<StockMovements> StockMovements { get; set; }
-        public DbSet<Stocks> Stocks { get; set; }
-        public DbSet<StorageLocations> StorageLocations { get; set; }
-        public DbSet<Suppliers> Suppliers { get; set; }
+        public DbSet<CashFlow> CashFlows { get; set; }
+        public DbSet<Category> Categories { get; set; }
+        public DbSet<Company> Companies { get; set; }
+        public DbSet<Currency> Currencies { get; set; }
+        public DbSet<Customer> Customers { get; set; }
+        public DbSet<Invoice> Invoices { get; set; }
+        public DbSet<Product> Products { get; set; }
+        public DbSet<PurchaseItem> PurchaseItems { get; set; }
+        public DbSet<Purchase> Purchases { get; set; }
+        public DbSet<SaleItem> SaleItems { get; set; }
+        public DbSet<Sale> Sales { get; set; }
+        public DbSet<Seller> Sellers { get; set; }
+        public DbSet<StockMovement> StockMovements { get; set; }
+        public DbSet<Stock> Stocks { get; set; }
+        public DbSet<StorageLocation> StorageLocations { get; set; }
+        public DbSet<Supplier> Suppliers { get; set; }
 
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
         {
@@ -53,7 +53,7 @@ namespace GariusStorage.Api.Infrastructure.Data
                       .OnDelete(DeleteBehavior.SetNull);
             });
 
-            modelBuilder.Entity<Companies>(entity =>
+            modelBuilder.Entity<Company>(entity =>
             {
                 entity.HasOne(c => c.DefaultCurrency)
                       .WithMany()
@@ -63,23 +63,23 @@ namespace GariusStorage.Api.Infrastructure.Data
             });
 
 
-            ConfigureTenantSpecificEntity<CashFlows>(modelBuilder, c => c.CashFlows);
-            ConfigureTenantSpecificEntity<Categories>(modelBuilder, c => c.Categories);
-            ConfigureTenantSpecificEntity<Customers>(modelBuilder, c => c.Customers);
-            ConfigureTenantSpecificEntity<Invoices>(modelBuilder, c => c.Invoices);
-            ConfigureTenantSpecificEntity<Products>(modelBuilder, c => c.Products);
-            ConfigureTenantSpecificEntity<PurchaseItems>(modelBuilder, c => c.PurchaseItems);
-            ConfigureTenantSpecificEntity<Purchases>(modelBuilder, c => c.Purchases);
-            ConfigureTenantSpecificEntity<SaleItems>(modelBuilder, c => c.SaleItems);
-            ConfigureTenantSpecificEntity<Sales>(modelBuilder, c => c.Sales);
-            ConfigureTenantSpecificEntity<Sellers>(modelBuilder, c => c.Sellers);
-            ConfigureTenantSpecificEntity<StockMovements>(modelBuilder, c => c.StockMovements);
-            ConfigureTenantSpecificEntity<Stocks>(modelBuilder, c => c.Stocks);
-            ConfigureTenantSpecificEntity<StorageLocations>(modelBuilder, c => c.StorageLocations);
-            ConfigureTenantSpecificEntity<Suppliers>(modelBuilder, c => c.Suppliers);
+            ConfigureTenantSpecificEntity<CashFlow>(modelBuilder, c => c.CashFlows);
+            ConfigureTenantSpecificEntity<Category>(modelBuilder, c => c.Categories);
+            ConfigureTenantSpecificEntity<Customer>(modelBuilder, c => c.Customers);
+            ConfigureTenantSpecificEntity<Invoice>(modelBuilder, c => c.Invoices);
+            ConfigureTenantSpecificEntity<Product>(modelBuilder, c => c.Products);
+            ConfigureTenantSpecificEntity<PurchaseItem>(modelBuilder, c => c.PurchaseItems);
+            ConfigureTenantSpecificEntity<Purchase>(modelBuilder, c => c.Purchases);
+            ConfigureTenantSpecificEntity<SaleItem>(modelBuilder, c => c.SaleItems);
+            ConfigureTenantSpecificEntity<Sale>(modelBuilder, c => c.Sales);
+            ConfigureTenantSpecificEntity<Seller>(modelBuilder, c => c.Sellers);
+            ConfigureTenantSpecificEntity<StockMovement>(modelBuilder, c => c.StockMovements);
+            ConfigureTenantSpecificEntity<Stock>(modelBuilder, c => c.Stocks);
+            ConfigureTenantSpecificEntity<StorageLocation>(modelBuilder, c => c.StorageLocations);
+            ConfigureTenantSpecificEntity<Supplier>(modelBuilder, c => c.Suppliers);
 
 
-            modelBuilder.Entity<CashFlows>(entity =>
+            modelBuilder.Entity<CashFlow>(entity =>
             {
                 entity.HasOne(d => d.Sale)
                     .WithMany(p => p.CashFlows)
@@ -92,7 +92,7 @@ namespace GariusStorage.Api.Infrastructure.Data
             });
 
             // Categories (relação ParentCategory)
-            modelBuilder.Entity<Categories>(entity =>
+            modelBuilder.Entity<Category>(entity =>
             {
                 entity.HasOne(d => d.ParentCategory)
                     .WithMany()
@@ -101,7 +101,7 @@ namespace GariusStorage.Api.Infrastructure.Data
             });
 
             // Invoices (relação com Sale)
-            modelBuilder.Entity<Invoices>(entity =>
+            modelBuilder.Entity<Invoice>(entity =>
             {
                 entity.HasOne(d => d.Sale)
                     .WithMany(p => p.Invoices)
@@ -110,7 +110,7 @@ namespace GariusStorage.Api.Infrastructure.Data
             });
 
             // Products (relação com Category)
-            modelBuilder.Entity<Products>(entity =>
+            modelBuilder.Entity<Product>(entity =>
             {
                 entity.HasOne(d => d.Category)
                     .WithMany(p => p.Products)
@@ -119,7 +119,7 @@ namespace GariusStorage.Api.Infrastructure.Data
             });
 
             // PurchaseItems (relações com Purchase e Product)
-            modelBuilder.Entity<PurchaseItems>(entity =>
+            modelBuilder.Entity<PurchaseItem>(entity =>
             {
                 entity.HasOne(d => d.Purchase)
                     .WithMany(p => p.Items)
@@ -132,7 +132,7 @@ namespace GariusStorage.Api.Infrastructure.Data
             });
 
             // Purchases (relação com Supplier)
-            modelBuilder.Entity<Purchases>(entity =>
+            modelBuilder.Entity<Purchase>(entity =>
             {
                 entity.HasOne(d => d.Supplier)
                     .WithMany(p => p.Purchases)
@@ -141,7 +141,7 @@ namespace GariusStorage.Api.Infrastructure.Data
             });
 
             // SaleItems (relações com Sale e Product)
-            modelBuilder.Entity<SaleItems>(entity =>
+            modelBuilder.Entity<SaleItem>(entity =>
             {
                 entity.HasOne(d => d.Sale)
                     .WithMany(p => p.Items)
@@ -154,7 +154,7 @@ namespace GariusStorage.Api.Infrastructure.Data
             });
 
             // Sales (relações com Seller e Customer)
-            modelBuilder.Entity<Sales>(entity =>
+            modelBuilder.Entity<Sale>(entity =>
             {
                 entity.HasOne(d => d.Seller)
                     .WithMany(p => p.Sales)
@@ -167,7 +167,7 @@ namespace GariusStorage.Api.Infrastructure.Data
             });
 
             // StockMovements (relações com Product, Sale, Purchase)
-            modelBuilder.Entity<StockMovements>(entity =>
+            modelBuilder.Entity<StockMovement>(entity =>
             {
                 entity.HasOne(d => d.Product)
                     .WithMany()
@@ -186,7 +186,7 @@ namespace GariusStorage.Api.Infrastructure.Data
             });
 
             // Stocks (relações com Product e StorageLocation)
-            modelBuilder.Entity<Stocks>(entity =>
+            modelBuilder.Entity<Stock>(entity =>
             {
                 entity.HasOne(d => d.Product)
                     .WithMany()
@@ -204,7 +204,7 @@ namespace GariusStorage.Api.Infrastructure.Data
 
         private void ConfigureTenantSpecificEntity<TEntity>(
             ModelBuilder modelBuilder,
-            Expression<Func<Companies, IEnumerable<TEntity>?>> navigationExpression)
+            Expression<Func<Company, IEnumerable<TEntity>?>> navigationExpression)
             where TEntity : BaseEntity, ITenantEntity
         {
             modelBuilder.Entity<TEntity>(entity =>
@@ -221,37 +221,37 @@ namespace GariusStorage.Api.Infrastructure.Data
         private static void SetDecimalPrecision(ModelBuilder modelBuilder)
         {
             // CashFlows
-            modelBuilder.Entity<CashFlows>().Property(p => p.Amount).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<CashFlow>().Property(p => p.Amount).HasColumnType("decimal(18,2)");
 
             // Invoices
-            modelBuilder.Entity<Invoices>().Property(p => p.TotalAmount).HasColumnType("decimal(18,2)");
-            modelBuilder.Entity<Invoices>().Property(p => p.TaxAmount).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Invoice>().Property(p => p.TotalAmount).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Invoice>().Property(p => p.TaxAmount).HasColumnType("decimal(18,2)");
 
             // Products
-            modelBuilder.Entity<Products>().Property(p => p.Price).HasColumnType("decimal(18,2)");
-            modelBuilder.Entity<Products>().Property(p => p.Cost).HasColumnType("decimal(18,2)");
-            modelBuilder.Entity<Products>().Property(p => p.TaxQuantityPerUnit).HasColumnType("decimal(18,4)");
-            modelBuilder.Entity<Products>().Property(p => p.ICMS_Rate).HasColumnType("decimal(5,2)");
-            modelBuilder.Entity<Products>().Property(p => p.PIS_Rate).HasColumnType("decimal(5,2)");
-            modelBuilder.Entity<Products>().Property(p => p.COFINS_Rate).HasColumnType("decimal(5,2)");
-            modelBuilder.Entity<Products>().Property(p => p.IPI_Rate).HasColumnType("decimal(5,2)");
-            modelBuilder.Entity<Products>().Property(p => p.Weight).HasColumnType("decimal(18,2)");
-            modelBuilder.Entity<Products>().Property(p => p.NetWeight).HasColumnType("decimal(18,2)");
-            modelBuilder.Entity<Products>().Property(p => p.GrossWeight).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Product>().Property(p => p.Price).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Product>().Property(p => p.Cost).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Product>().Property(p => p.TaxQuantityPerUnit).HasColumnType("decimal(18,4)");
+            modelBuilder.Entity<Product>().Property(p => p.ICMS_Rate).HasColumnType("decimal(5,2)");
+            modelBuilder.Entity<Product>().Property(p => p.PIS_Rate).HasColumnType("decimal(5,2)");
+            modelBuilder.Entity<Product>().Property(p => p.COFINS_Rate).HasColumnType("decimal(5,2)");
+            modelBuilder.Entity<Product>().Property(p => p.IPI_Rate).HasColumnType("decimal(5,2)");
+            modelBuilder.Entity<Product>().Property(p => p.Weight).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Product>().Property(p => p.NetWeight).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Product>().Property(p => p.GrossWeight).HasColumnType("decimal(18,2)");
 
             // PurchaseItems
-            modelBuilder.Entity<PurchaseItems>().Property(p => p.UnitCost).HasColumnType("decimal(18,2)");
-            modelBuilder.Entity<PurchaseItems>().Property(p => p.TotalCost).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<PurchaseItem>().Property(p => p.UnitCost).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<PurchaseItem>().Property(p => p.TotalCost).HasColumnType("decimal(18,2)");
 
             // Purchases
-            modelBuilder.Entity<Purchases>().Property(p => p.TotalAmount).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Purchase>().Property(p => p.TotalAmount).HasColumnType("decimal(18,2)");
 
             // SaleItems
-            modelBuilder.Entity<SaleItems>().Property(p => p.UnitPrice).HasColumnType("decimal(18,2)");
-            modelBuilder.Entity<SaleItems>().Property(p => p.TotalPrice).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<SaleItem>().Property(p => p.UnitPrice).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<SaleItem>().Property(p => p.TotalPrice).HasColumnType("decimal(18,2)");
 
             // Sales
-            modelBuilder.Entity<Sales>().Property(p => p.TotalAmount).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Sale>().Property(p => p.TotalAmount).HasColumnType("decimal(18,2)");
         }
     }
 }

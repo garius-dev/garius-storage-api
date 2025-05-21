@@ -19,7 +19,7 @@ namespace GariusStorage.Api.Domain.Entities.Identity
         public Guid? CompanyId { get; set; }
 
         [ForeignKey("CompanyId")]
-        public Companies? Company { get; set; }
+        public Company? Company { get; set; }
 
         public ApplicationUser() : base()
         {

@@ -5,7 +5,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace GariusStorage.Api.Domain.Entities
 {
-    public class Companies : BaseEntity
+    public class Company : BaseEntity
     {
         [Required, MaxLength(255)]
         public string LegalName { get; set; }
@@ -39,23 +39,23 @@ namespace GariusStorage.Api.Domain.Entities
 
         // Propriedade de navegação para a moeda padrão
         [ForeignKey("DefaultCurrencyId")]
-        public Currencies? DefaultCurrency { get; set; }
+        public Currency? DefaultCurrency { get; set; }
 
         public ICollection<ApplicationUser> Users { get; set; } = [];
-        public ICollection<Products> Products { get; set; } = [];
-        public ICollection<Customers> Customers { get; set; } = [];
-        public ICollection<Stocks> Stocks { get; set; } = [];
-        public ICollection<StockMovements> StockMovements { get; set; } = [];
-        public ICollection<CashFlows> CashFlows { get; set; } = [];
-        public ICollection<Categories> Categories { get; set; } = [];
-        public ICollection<Suppliers> Suppliers { get; set; } = [];
-        public ICollection<Purchases> Purchases { get; set; } = [];
-        public ICollection<PurchaseItems> PurchaseItems { get; set; } = [];
-        public ICollection<Sales> Sales { get; set; } = [];
-        public ICollection<SaleItems> SaleItems { get; set; } = [];
-        public ICollection<Sellers> Sellers { get; set; } = [];
-        public ICollection<Invoices> Invoices { get; set; } = [];
-        public ICollection<StorageLocations> StorageLocations { get; set; } = [];
+        public ICollection<Product> Products { get; set; } = [];
+        public ICollection<Customer> Customers { get; set; } = [];
+        public ICollection<Stock> Stocks { get; set; } = [];
+        public ICollection<StockMovement> StockMovements { get; set; } = [];
+        public ICollection<CashFlow> CashFlows { get; set; } = [];
+        public ICollection<Category> Categories { get; set; } = [];
+        public ICollection<Supplier> Suppliers { get; set; } = [];
+        public ICollection<Purchase> Purchases { get; set; } = [];
+        public ICollection<PurchaseItem> PurchaseItems { get; set; } = [];
+        public ICollection<Sale> Sales { get; set; } = [];
+        public ICollection<SaleItem> SaleItems { get; set; } = [];
+        public ICollection<Seller> Sellers { get; set; } = [];
+        public ICollection<Invoice> Invoices { get; set; } = [];
+        public ICollection<StorageLocation> StorageLocations { get; set; } = [];
         //public ICollection<Currencies> Currencies { get; set; } = new List<Currencies>();
     }
 }

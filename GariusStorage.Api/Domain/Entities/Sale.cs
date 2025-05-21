@@ -4,7 +4,7 @@ using GariusStorage.Api.Domain.Interfaces;
 
 namespace GariusStorage.Api.Domain.Entities
 {
-    public class Sales : BaseEntity, ITenantEntity
+    public class Sale : BaseEntity, ITenantEntity
     {
         [Required]
         public Guid SellerId { get; set; }
@@ -12,10 +12,10 @@ namespace GariusStorage.Api.Domain.Entities
         public Guid? CustomerId { get; set; } // Opcional, para vendas sem cliente identificado
 
         [ForeignKey("SellerId")]
-        public Sellers Seller { get; set; }
+        public Seller Seller { get; set; }
 
         [ForeignKey("CustomerId")]
-        public Customers? Customer { get; set; }
+        public Customer? Customer { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal TotalAmount { get; set; }
@@ -26,16 +26,16 @@ namespace GariusStorage.Api.Domain.Entities
         public string? Notes { get; set; }
 
 
-        public ICollection<SaleItems> Items { get; set; } = new List<SaleItems>();
-        public ICollection<StockMovements> StockMovements { get; set; } = new List<StockMovements>();
-        public ICollection<CashFlows> CashFlows { get; set; } = new List<CashFlows>();
-        public ICollection<Invoices> Invoices { get; set; } = new List<Invoices>();
+        public ICollection<SaleItem> Items { get; set; } = new List<SaleItem>();
+        public ICollection<StockMovement> StockMovements { get; set; } = new List<StockMovement>();
+        public ICollection<CashFlow> CashFlows { get; set; } = new List<CashFlow>();
+        public ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
 
         // Propriedades para Multi-Tenancy
         [Required]
         public Guid CompanyId { get; set; }
 
         [ForeignKey("CompanyId")]
-        public Companies Company { get; set; }
+        public Company Company { get; set; }
     }
 }

@@ -2,7 +2,7 @@
 
 namespace GariusStorage.Api.Domain.Interfaces.Repositories
 {
-    public interface ISaleItemRepository : IRepository<SaleItems>
+    public interface ISaleItemRepository : IRepository<SaleItem>
     {
     }
 }

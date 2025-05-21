@@ -4,13 +4,13 @@ using GariusStorage.Api.Domain.Interfaces;
 
 namespace GariusStorage.Api.Domain.Entities
 {
-    public class Purchases : BaseEntity, ITenantEntity
+    public class Purchase : BaseEntity, ITenantEntity
     {
         [Required]
         public Guid SupplierId { get; set; }
 
         [ForeignKey("SupplierId")]
-        public Suppliers Supplier { get; set; }
+        public Supplier Supplier { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal TotalAmount { get; set; }
@@ -21,15 +21,15 @@ namespace GariusStorage.Api.Domain.Entities
         public string? Notes { get; set; }
 
 
-        public ICollection<PurchaseItems> Items { get; set; } = new List<PurchaseItems>();
-        public ICollection<StockMovements> StockMovements { get; set; } = new List<StockMovements>();
-        public ICollection<CashFlows> CashFlows { get; set; } = new List<CashFlows>();
+        public ICollection<PurchaseItem> Items { get; set; } = new List<PurchaseItem>();
+        public ICollection<StockMovement> StockMovements { get; set; } = new List<StockMovement>();
+        public ICollection<CashFlow> CashFlows { get; set; } = new List<CashFlow>();
 
         // Propriedades para Multi-Tenancy
         [Required]
         public Guid CompanyId { get; set; }
 
         [ForeignKey("CompanyId")]
-        public Companies Company { get; set; }
+        public Company Company { get; set; }
     }
 }

@@ -5,6 +5,6 @@ namespace GariusStorage.Api.Domain.Interfaces
     public interface ITenantEntity
     {
         Guid CompanyId { get; set; }
-        Companies Company { get; set; }
+        Company Company { get; set; }
     }
 }

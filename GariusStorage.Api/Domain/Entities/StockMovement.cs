@@ -10,7 +10,7 @@ namespace GariusStorage.Api.Domain.Entities
         Exit = 2
     }
 
-    public class StockMovements : BaseEntity, ITenantEntity
+    public class StockMovement : BaseEntity, ITenantEntity
     {
         [Required]
         public Guid ProductId { get; set; }
@@ -20,13 +20,13 @@ namespace GariusStorage.Api.Domain.Entities
         public Guid? PurchaseId { get; set; }
 
         [ForeignKey("ProductId")]
-        public Products Product { get; set; }
+        public Product Product { get; set; }
 
         [ForeignKey("SaleId")]
-        public Sales? Sale { get; set; }
+        public Sale? Sale { get; set; }
 
         [ForeignKey("PurchaseId")]
-        public Purchases? Purchase { get; set; }
+        public Purchase? Purchase { get; set; }
 
         [Required]
         public MovementType MovementType { get; set; }
@@ -42,7 +42,7 @@ namespace GariusStorage.Api.Domain.Entities
         public Guid CompanyId { get; set; }
 
         [ForeignKey("CompanyId")]
-        public Companies Company { get; set; }
+        public Company Company { get; set; }
 
     }
 }

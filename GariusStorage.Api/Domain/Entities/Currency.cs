@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace GariusStorage.Api.Domain.Entities
 {
-    public class Currencies : BaseEntity
+    public class Currency : BaseEntity
     {
         [Required, MaxLength(3)]
         public string Code { get; set; }

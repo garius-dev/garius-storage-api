@@ -2,7 +2,7 @@
 
 namespace GariusStorage.Api.Domain.Interfaces.Repositories
 {
-    public interface ICategoryRepository : IRepository<Categories>
+    public interface ICategoryRepository : IRepository<Category>
     {
     }
 }

@@ -5,7 +5,9 @@ using GariusStorage.Api.Application.Services;
 using GariusStorage.Api.Configuration;
 using GariusStorage.Api.Domain.Entities.Identity;
 using GariusStorage.Api.Domain.Interfaces;
+using GariusStorage.Api.Domain.Interfaces.Repositories;
 using GariusStorage.Api.Infrastructure.Data;
+using GariusStorage.Api.Infrastructure.Data.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
@@ -275,8 +277,24 @@ namespace GariusStorage.Api.Extensions
             services.AddScoped<IEmailService, EmailService>();
             services.AddScoped<IUserManagementService, UserManagementService>();
             services.AddScoped<ITurnstileService, TurnstileService>();
-            // Adicione outros repositórios e serviços aqui
-            // Ex: services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+            //---
+            services.AddScoped<ICashFlowRepository, CashFlowRepository>();
+            services.AddScoped<ICategoryRepository, CategoryRepository>();
+            services.AddScoped<ICompanyRepository, CompanyRepository>();
+            services.AddScoped<ICurrencyRepository, CurrencyRepository>();
+            services.AddScoped<ICustomerRepository, CustomerRepository>();
+            services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+            services.AddScoped<IProductRepository, ProductRepository>();
+            services.AddScoped<IPurchaseItemRepository, PurchaseItemRepository>();
+            services.AddScoped<IPurchaseRepository, PurchaseRepository>();
+            services.AddScoped<ISaleItemRepository, SaleItemRepository>();
+            services.AddScoped<ISaleRepository, SaleRepository>();
+            services.AddScoped<ISellerRepository, SellerRepository>();
+            services.AddScoped<IStockMovementRepository, StockMovementRepository>();
+            services.AddScoped<IStockRepository, StockRepository>();
+            services.AddScoped<IStorageLocationRepository, StorageLocationRepository>();
+            services.AddScoped<ISupplierRepository, SupplierRepository>();
+
             return services;
         }
 

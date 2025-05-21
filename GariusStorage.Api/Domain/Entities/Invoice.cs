@@ -4,13 +4,13 @@ using GariusStorage.Api.Domain.Interfaces;
 
 namespace GariusStorage.Api.Domain.Entities
 {
-    public class Invoices : BaseEntity, ITenantEntity
+    public class Invoice : BaseEntity, ITenantEntity
     {
         [Required]
         public Guid SaleId { get; set; }
 
         [ForeignKey("SaleId")]
-        public Sales Sale { get; set; }
+        public Sale Sale { get; set; }
 
         [Required, MaxLength(50)]
         public string InvoiceNumber { get; set; }
@@ -49,6 +49,6 @@ namespace GariusStorage.Api.Domain.Entities
         public Guid CompanyId { get; set; }
 
         [ForeignKey("CompanyId")]
-        public Companies Company { get; set; }
+        public Company Company { get; set; }
     }
 }

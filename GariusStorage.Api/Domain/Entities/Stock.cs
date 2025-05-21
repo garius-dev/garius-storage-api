@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace GariusStorage.Api.Domain.Entities
 {
-    public class Stocks : BaseEntity, ITenantEntity
+    public class Stock : BaseEntity, ITenantEntity
     {
         [Required]
         public Guid ProductId { get; set; }
@@ -18,10 +18,10 @@ namespace GariusStorage.Api.Domain.Entities
         public DateTime? ExpiryDate { get; set; } // Data de validade
 
         [ForeignKey("ProductId")]
-        public Products Product { get; set; }
+        public Product Product { get; set; }
 
         [ForeignKey("StorageLocationId")]
-        public StorageLocations StorageLocation { get; set; }
+        public StorageLocation StorageLocation { get; set; }
 
         public int Quantity { get; set; }
 
@@ -30,7 +30,7 @@ namespace GariusStorage.Api.Domain.Entities
         public Guid CompanyId { get; set; }
 
         [ForeignKey("CompanyId")]
-        public Companies Company { get; set; }
+        public Company Company { get; set; }
 
     }
 }

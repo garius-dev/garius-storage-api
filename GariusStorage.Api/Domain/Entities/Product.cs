@@ -4,7 +4,7 @@ using GariusStorage.Api.Domain.Interfaces;
 
 namespace GariusStorage.Api.Domain.Entities
 {
-    public class Products : BaseEntity, ITenantEntity
+    public class Product : BaseEntity, ITenantEntity
     {
         [Required, MaxLength(255)]
         public string Name { get; set; }
@@ -45,7 +45,7 @@ namespace GariusStorage.Api.Domain.Entities
         public Guid? CategoryId { get; set; }
 
         [ForeignKey("CategoryId")]
-        public Categories? Category { get; set; }
+        public Category? Category { get; set; }
 
         [MaxLength(50)]
         public string? UnitOfMeasure { get; set; }
@@ -102,7 +102,7 @@ namespace GariusStorage.Api.Domain.Entities
         public Guid CompanyId { get; set; }
 
         [ForeignKey("CompanyId")]
-        public Companies Company { get; set; }
+        public Company Company { get; set; }
 
     }
 }

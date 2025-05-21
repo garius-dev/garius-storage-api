@@ -2,7 +2,7 @@
 
 namespace GariusStorage.Api.Domain.Interfaces.Repositories
 {
-    public interface IStorageLocationRepository : IRepository<StorageLocations>
+    public interface IStorageLocationRepository : IRepository<StorageLocation>
     {
     }
 }

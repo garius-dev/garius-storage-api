@@ -2,7 +2,7 @@
 
 namespace GariusStorage.Api.Domain.Interfaces.Repositories
 {
-    public interface ICurrencyRepository : IRepository<Currencies>
+    public interface ICurrencyRepository : IRepository<Currency>
     {
     }
 }

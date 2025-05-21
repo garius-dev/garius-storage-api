@@ -10,17 +10,17 @@ namespace GariusStorage.Api.Domain.Entities
         Exit = 2
     }
 
-    public class CashFlows : BaseEntity, ITenantEntity
+    public class CashFlow : BaseEntity, ITenantEntity
     {
         public Guid? SaleId { get; set; }
 
         public Guid? PurchaseId { get; set; }
 
         [ForeignKey("SaleId")]
-        public Sales? Sale { get; set; }
+        public Sale? Sale { get; set; }
 
         [ForeignKey("PurchaseId")]
-        public Purchases? Purchase { get; set; }
+        public Purchase? Purchase { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal Amount { get; set; }
@@ -39,6 +39,6 @@ namespace GariusStorage.Api.Domain.Entities
         public Guid CompanyId { get; set; }
 
         [ForeignKey("CompanyId")]
-        public Companies Company { get; set; }
+        public Company Company { get; set; }
     }
 }

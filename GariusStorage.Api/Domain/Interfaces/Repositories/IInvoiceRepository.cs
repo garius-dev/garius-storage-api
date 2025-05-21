@@ -2,7 +2,7 @@
 
 namespace GariusStorage.Api.Domain.Interfaces.Repositories
 {
-    public interface IInvoiceRepository : IRepository<Invoices>
+    public interface IInvoiceRepository : IRepository<Invoice>
     {
     }
 }

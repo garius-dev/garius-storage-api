@@ -2,7 +2,7 @@
 
 namespace GariusStorage.Api.Domain.Interfaces.Repositories
 {
-    public interface ICashFlowRepository : IRepository<CashFlows>
+    public interface ICashFlowRepository : IRepository<CashFlow>
     {
     }
 }

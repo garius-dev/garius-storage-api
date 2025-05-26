@@ -279,6 +279,7 @@ namespace GariusStorage.Api.Extensions
             services.AddScoped<IEmailService, EmailService>();
             services.AddScoped<IUserManagementService, UserManagementService>();
             services.AddScoped<ITurnstileService, TurnstileService>();
+            services.AddScoped<ICloudinaryService, CloudinaryService>();
             //---
             services.AddScoped<ICashFlowRepository, CashFlowRepository>();
             services.AddScoped<ICategoryRepository, CategoryRepository>();

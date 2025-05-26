@@ -1,6 +1,7 @@
 ﻿using Asp.Versioning;
 using GariusStorage.Api.Application.Dtos;
 using GariusStorage.Api.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -22,6 +23,7 @@ namespace GariusStorage.Api.WebApi.Controllers.v1
             _logger = logger;
         }
 
+        [Authorize]
         [HttpGet("profile/{emailOrUsername}")]
         [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -40,6 +42,7 @@ namespace GariusStorage.Api.WebApi.Controllers.v1
             return Ok(userProfile);
         }
 
+        [Authorize]
         [HttpPut("profile/{emailOrUsername}")]
         [ProducesResponseType(typeof(UpdateUserProfileResultDto), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(UpdateUserProfileResultDto), StatusCodes.Status400BadRequest)]

@@ -156,7 +156,7 @@ namespace GariusStorage.Api.Application.Services
             _logger.LogInformation("Usuário {Username} logado com sucesso.", dto.Username);
             var roles = await _userManager.GetRolesAsync(user);
             var token = _tokenService.GenerateJwtToken(user, roles);
-
+            
             return new LoginResponseDto
             {
                 Token = token,
@@ -164,6 +164,7 @@ namespace GariusStorage.Api.Application.Services
                 Username = user.UserName,
                 Email = user.Email,
                 Roles = roles,
+                IsCompanyOwner = user.IsCompanyOwner,
                 Message = "Login bem-sucedido."
             };
         }
@@ -224,6 +225,7 @@ namespace GariusStorage.Api.Application.Services
                         EmailConfirmed = true,
                         IsExternalUser = true,
                         IsActive = true,
+                        IsCompanyOwner = false,
                         FirstName = info.Principal.FindFirstValue(ClaimTypes.GivenName),
                         LastName = info.Principal.FindFirstValue(ClaimTypes.Surname),
                         CreatedAt = DateTime.UtcNow,
@@ -283,6 +285,7 @@ namespace GariusStorage.Api.Application.Services
 
             return new LoginResponseDto
             {
+                IsCompanyOwner = userToLogin.IsCompanyOwner,
                 Token = token,
                 UserId = userToLogin.Id,
                 Username = userToLogin.UserName,

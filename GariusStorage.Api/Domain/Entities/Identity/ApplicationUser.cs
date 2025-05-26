@@ -12,6 +12,7 @@ namespace GariusStorage.Api.Domain.Entities.Identity
         public string? LastName { get; set; }
         public bool IsExternalUser { get; set; } = false;
         public bool IsActive { get; set; } = true;
+        public bool IsCompanyOwner { get; set; } = false;
         public DateTime CreatedAt { get; set; }
         public DateTime LastUpdate { get; set; }
 

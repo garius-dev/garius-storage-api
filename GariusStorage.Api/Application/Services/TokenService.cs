@@ -28,7 +28,8 @@ namespace GariusStorage.Api.Application.Services
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Name, user.UserName)
+                new Claim(ClaimTypes.Name, user.UserName),
+                new Claim("is_company_owner", user.IsCompanyOwner ? "yes" : "no")
             };
 
             foreach (var role in roles)
@@ -40,6 +41,10 @@ namespace GariusStorage.Api.Application.Services
             if (user.CompanyId.HasValue && user.CompanyId.Value != Guid.Empty)
             {
                 claims.Add(new Claim("company_id", user.CompanyId.Value.ToString()));
+            }
+            else
+            {
+                claims.Add(new Claim("company_id", "none"));
             }
 
             if (additionalClaims != null)

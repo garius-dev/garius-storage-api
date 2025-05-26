@@ -60,7 +60,7 @@ try
         var urlCallbacksResponse = LoadConfigHelper.LoadConfigFromSecret<Dictionary<string, string>>(builder.Configuration, "GariusStorageApi--UrlCallbackSettings");
         urlCallbackSettings = new UrlCallbackSettings(builder.Environment.EnvironmentName, urlCallbacksResponse);
 
-        jwtSettings = LoadConfigHelper.LoadConfigFromSecret<JwtSettings>(builder.Configuration, "MetalFlowScheduler-JwtSettings");
+        jwtSettings = LoadConfigHelper.LoadConfigFromSecret<JwtSettings>(builder.Configuration, "GariusStorageApi--JwtSettings");
 
         // Disponibiliza as configurações carregadas como IOptions<T> para injeção de dependência
         builder.Services.AddSingleton(Options.Create(jwtSettings));

@@ -240,7 +240,8 @@ namespace GariusStorage.Api.Extensions
                                         "https://lovable.dev/projects/13fb6a64-b608-471d-b202-735249a9d63d"// Sua URL do ngrok para teste
                                        )
                                .AllowAnyMethod()
-                               .AllowAnyHeader();
+                               .AllowAnyHeader()
+                               .AllowCredentials();
                     }
                     else
                     {
@@ -297,6 +298,8 @@ namespace GariusStorage.Api.Extensions
             services.AddScoped<IStockRepository, StockRepository>();
             services.AddScoped<IStorageLocationRepository, StorageLocationRepository>();
             services.AddScoped<ISupplierRepository, SupplierRepository>();
+            //---
+            services.AddScoped<ICompanyService, CompanyService>();
 
             return services;
         }

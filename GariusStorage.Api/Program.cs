@@ -121,6 +121,7 @@ try
         });
     }
 
+    app.UseRouting();
     app.UseCustomCors(); // Aplica a política de CORS configurada
     app.UseHttpsRedirection();
     app.UseAuthentication(); // Middleware de autenticação
